@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Мечкин Камен — 1903 · Voxel</title>
+<title>Мечкин Камен — 1903</title>
 <style>
   :root{
     --ink:#1c140d; --bone:#e8dcc4; --blood:#8f2b1f; --brass:#c08a3e;
@@ -139,9 +139,9 @@
   <div id="dmgdir"></div>
   <div id="healthwrap">
     <div id="healthbar"><div id="healthfill"></div></div>
-    <div id="healthtext">ЖИВОТ · LIFE</div>
+    <div id="healthtext">ЖИВОТ</div>
   </div>
-  <div id="ammo">Бердана · ready</div>
+  <div id="ammo">Бердана · спремна</div>
   <div id="stancelabel">стоиш</div>
   <div id="nadelabel">бомби · 3</div>
   <div id="coinlabel">парички · 0/10</div>
@@ -159,10 +159,10 @@
 <div class="screen hidden" id="pausescreen">
   <div class="ornament">пауза</div>
   <h1>ЗАСТОЈ</h1>
-  <div class="sub">Одбраната чека · The defence holds its breath</div>
-  <button class="bigbtn" id="resumebtn">Продолжи · Resume</button>
+  <div class="sub">Одбраната здивнува. Аскерите чекаат.</div>
+  <button class="bigbtn" id="resumebtn">Продолжи</button>
   <div class="setrow" style="margin-top:16px;justify-content:center;">
-    <span>Музика · Music</span><button class="tog" id="setMusic2">ON</button></div>
+    <span>Музика</span><button class="tog" id="setMusic2">ON</button></div>
 </div>
 <button class="tbtn" id="nadebtn">БОМБА</button>
 <button class="tbtn" id="stancebtn">СТАВ</button>
@@ -173,31 +173,35 @@
 <div class="screen" id="startscreen">
   <div class="ornament">12 август 1903 · Илинден</div>
   <h1>МЕЧКИН <span class="ck">КАМЕН</span></h1>
-  <div class="sub">Крупни коцки · Voxel edition</div>
-  <p class="brief">You hold the blocky rocks above Kruševo with a single-shot Berdan rifle.
-  Cover now works: crouch or go prone behind stone and bullets stop in the rock —
-  yours and theirs. Askers will keep advancing to find an open line of fire.</p>
-  <button class="bigbtn" id="startbtn">Започни · Begin</button>
+  <div class="sub">Одбраната на Крушевската Република</div>
+  <p class="brief">12 август 1903. Десетти ден на Крушевската Република — првата република
+  на Балканот, родена во огнот на Илинденското востание. Од Битола надоаѓа Бахтијар-паша
+  со илјадници аскери и артилерија. На карпите над градот, кај Мечкин Камен, застанува
+  четата на војводата <b>Питу Гули</b>. Кога му предлагаат повлекување, тој одговара:
+  „Овде ќе се умре!" Комитите ја бранат позицијата до последниот куршум — и до последниот човек.
+  Сега каменот е твој. Држи го колку што држи срцето. <b>Слобода или смрт.</b></p>
+  <button class="bigbtn" id="startbtn">Започни</button>
   <div style="margin-top:18px;">
-    <div class="setrow"><span>Осетливост · Sensitivity</span>
+    <div class="setrow"><span>Осетливост</span>
       <input type="range" id="setSens" min="0.5" max="2" step="0.1" value="1"></div>
-    <div class="setrow"><span>Сјај · Bloom</span><button class="tog" id="setBloom">ON</button>
-      <span style="margin-left:14px;">Звук · Sound</span><button class="tog" id="setSound">ON</button>
-      <span style="margin-left:14px;">Музика · Music</span><button class="tog" id="setMusic">ON</button></div>
+    <div class="setrow"><span>Сјај</span><button class="tog" id="setBloom">ON</button>
+      <span style="margin-left:14px;">Звук</span><button class="tog" id="setSound">ON</button>
+      <span style="margin-left:14px;">Музика</span><button class="tog" id="setMusic">ON</button></div>
   </div>
   <div class="controls-hint">
-    Joystick — move (до крај = трчање) · ОГАН — fire · ОРУЖЈЕ/1·2·3 — weapon · БОМБА · КАМЕН (10 парички)<br>
-    Desktop: WASD · 1/2/3 weapon · G бомба · B камен · Shift трчање · Ctrl лази · C клек · Space скок · P/Esc пауза
+    Џојстик — движење (до крај = трчање) · влечи по екран — нишани · ОГАН · БОМБА · КАМЕН (10 парички)<br>
+    Тастатура: WASD — движење · 1/2/3 — оружје · G — бомба · B — камен · Shift — трчање · Ctrl — лази · C — клекни · Space — скок · P — пауза
   </div>
 </div>
 
 <div class="screen hidden" id="endscreen">
   <div class="ornament">Мечкин Камен · 1903</div>
   <h1 id="endtitle">ПАДНА <span class="ck">КАМЕНОТ</span></h1>
-  <div class="sub" id="endsub">The stone has fallen — but the memory endures.</div>
+  <div class="sub" id="endsub">Тука, на 12 август 1903, падна Питу Гули со четата —
+  но Мечкин Камен остана вечен спомен на слободата.</div>
   <div id="finalstats"></div>
   <div id="leaderboard"></div>
-  <button class="bigbtn" id="restartbtn">Уште еднаш · Again</button>
+  <button class="bigbtn" id="restartbtn">Уште еднаш</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -216,12 +220,12 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.18;
+renderer.toneMappingExposure = 1.05;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const SKY_TOP = 0x86b3e0, SKY_HOR = 0xeae0d0;       // warm hazy horizon, like a shader morning
-scene.fog = new THREE.Fog(SKY_HOR, 50, 200);
+const SKY_TOP = 0x4f8de8, SKY_HOR = 0xd6e6f5;       // Minecraft-shader blue
+scene.fog = new THREE.Fog(SKY_HOR, 80, 260);
 
 const BASE_FOV = 70, ZOOM_FOV = 32;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth/window.innerHeight, 0.1, 600);
@@ -242,7 +246,9 @@ window.addEventListener('resize', ()=>{
     vertexShader:'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
     fragmentShader:'uniform vec3 top; uniform vec3 bottom; varying vec3 vP;'+
       'void main(){ float h = clamp(normalize(vP).y*1.7+0.1, 0.0, 1.0);'+
-      'gl_FragColor = vec4(mix(bottom, top, pow(h,0.8)), 1.0); }'
+      'vec3 c = mix(bottom, top, pow(h,0.8));'+
+      'float dith = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)))*43758.5453);'+
+      'gl_FragColor = vec4(c + (dith-0.5)*0.012, 1.0); }'
   });
   scene.add(new THREE.Mesh(geo, mat));
   /* bright sun core */
@@ -265,8 +271,8 @@ window.addEventListener('resize', ()=>{
   scene.add(glow);
 })();
 
-scene.add(new THREE.HemisphereLight(0xdce8ff, 0x99895e, 0.85));   // sky fill + warm ground bounce
-const sun = new THREE.DirectionalLight(0xfff0d0, 1.45);           // strong warm key light
+scene.add(new THREE.HemisphereLight(0xdce8ff, 0x99895e, 0.72));   // sky fill + warm ground bounce
+const sun = new THREE.DirectionalLight(0xfff0d0, 1.25);           // strong warm key light
 sun.position.set(-60, 80, -40);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -277,7 +283,7 @@ sun.shadow.bias = -0.0012;
 sun.shadow.radius = 3;                                            // softer shadow edges
 scene.add(sun);
 /* subtle warm rim fill from the opposite side to lift the shadows */
-const fill = new THREE.DirectionalLight(0xffe6c4, 0.25);
+const fill = new THREE.DirectionalLight(0xffe6c4, 0.18);
 fill.position.set(70, 40, 60);
 scene.add(fill);
 
@@ -298,7 +304,7 @@ const Bloom = (function(){
   const QUAD_OPTS = {depthTest:false, depthWrite:false, toneMapped:false};
   const VERT = 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }';
   const brightMat = new THREE.ShaderMaterial(Object.assign({}, QUAD_OPTS, {
-    uniforms:{tDiffuse:{value:null}, threshold:{value:0.72}},
+    uniforms:{tDiffuse:{value:null}, threshold:{value:0.84}},
     vertexShader:VERT,
     fragmentShader:'uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv;'+
       'void main(){ vec4 c=texture2D(tDiffuse,vUv); float l=dot(c.rgb,vec3(0.299,0.587,0.114));'+
@@ -314,11 +320,14 @@ const Bloom = (function(){
       'gl_FragColor=vec4(s.rgb,1.); }'
   }));
   const compMat = new THREE.ShaderMaterial(Object.assign({}, QUAD_OPTS, {
-    uniforms:{tBase:{value:null}, tBloom:{value:null}, strength:{value:0.8}},
+    uniforms:{tBase:{value:null}, tBloom:{value:null}, strength:{value:0.55}},
     vertexShader:VERT,
     fragmentShader:'uniform sampler2D tBase; uniform sampler2D tBloom; uniform float strength; varying vec2 vUv;'+
       'void main(){ vec3 b=texture2D(tBase,vUv).rgb; vec3 g=texture2D(tBloom,vUv).rgb;'+
-      'gl_FragColor=vec4(b + g*strength, 1.); }'
+      'vec3 c = b + g*strength;'+
+      'float l = dot(c, vec3(0.299,0.587,0.114));'+
+      'c = mix(vec3(l), c, 1.14);'+                       // saturation lift
+      'gl_FragColor=vec4(c, 1.); }'
   }));
   function resize(){
     W = window.innerWidth; H = window.innerHeight;
@@ -366,8 +375,10 @@ function pixTex(fn, w, h){
   }
   x.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;
+  t.magFilter = THREE.NearestFilter;                   // crisp pixels up close
+  t.minFilter = THREE.NearestMipmapLinearFilter;       // mipmapped far away — no shimmer lines
+  t.generateMipmaps = true;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();  // sharp at oblique angles
   return t;
 }
 const rnd = (a,b)=> a + Math.random()*(b-a);
@@ -413,9 +424,9 @@ const texDirt = pixTex((i,j)=>{
 const grassBlobs = makeBlobs(23, 13, 1.2, 2.8);
 const texGrassTop = pixTex((i,j)=>{
   const b = blobAt(grassBlobs, i, j), n = px(i,j,1);
-  let c = [100, 134, 50];
-  if(b >= 0) c = b < 0.35 ? [86,118,42] : b < 0.7 ? [95,127,46] : [113,148,58];
-  if(n > 0.93) c = [126, 158, 66];                            // bright blade tips
+  let c = [92, 140, 44];
+  if(b >= 0) c = b < 0.35 ? [76,122,36] : b < 0.7 ? [86,132,40] : [106,154,52];
+  if(n > 0.93) c = [122, 168, 58];                            // bright blade tips
   const v = (n-0.5)*10;
   return [c[0]+v, c[1]+v, c[2]+v*0.5];
 });
@@ -423,7 +434,7 @@ const texDirtSide = pixTex((i,j)=>{
   const lip = 2 + Math.floor(px(i,0,5)*2.6);                  // ragged 2–4 px lip
   if(j < lip){
     const b = blobAt(grassBlobs, i, j), n = px(i,j,1);
-    let c = b >= 0 && b < 0.5 ? [88,120,44] : [100,132,50];
+    let c = b >= 0 && b < 0.5 ? [78,124,38] : [92,138,44];
     const v = (n-0.5)*14;
     return [c[0]+v, c[1]+v, c[2]+v*0.5];
   }
@@ -442,11 +453,22 @@ const texLog = pixTex((i,j)=>{
   const n = px(i,j,10), v = (n-0.5)*8;
   return [base+v, base*0.74+v, base*0.44+v*0.5];
 });
+const texLogTop = pixTex((i,j)=>{
+  /* end grain: dark bark rim, pale wood with concentric rings */
+  if(i<2 || i>13 || j<2 || j>13){
+    const n = px(i,j,28), v = (n-0.5)*8;
+    return [84+v, 62+v, 38+v];
+  }
+  const ring = Math.max(Math.abs(i-7.5), Math.abs(j-7.5));
+  const dark = (Math.floor(ring)%2===0) ? -18 : 0;
+  const n = px(i,j,29), v = (n-0.5)*6;
+  return [172+v+dark, 138+v+dark, 92+v+dark];
+});
 const texLeaf = pixTex((i,j)=>{
   /* airy foliage: dark/light leaf clumps with see-through holes */
   const n = px(i,j,14), c = px(i>>1,j>>1,15);
   if(n > 0.78) return [0,0,0,0];                              // holes → alphaTest
-  const base = c < 0.4 ? [48,82,30] : c < 0.75 ? [62,98,38] : [78,116,46];
+  const base = c < 0.4 ? [44,96,26] : c < 0.75 ? [58,114,34] : [76,132,42];
   const v = (n-0.5)*16;
   return [base[0]+v, base[1]+v, base[2]+v*0.5];
 });
@@ -482,7 +504,7 @@ const texFez   = pixTex(()=>{ const v=rnd(-10,10); return [150+v, 44+v*0.5, 32+v
 const texGrassSprite = pixTex((i,j)=>{
   /* sparse vertical strands, transparent background */
   const strand = (i*7+3)%16 < 2 && j > 3 - 0 && Math.random() < 0.85 && j > (i*5)%6;
-  if(strand){ const v=rnd(-16,16); return [98+v, 124+v, 48+v*0.5, 255]; }
+  if(strand){ const v=rnd(-16,16); return [86+v, 132+v, 42+v*0.5, 255]; }
   return [0,0,0,0];
 });
 const texBirch = pixTex((i,j)=>{
@@ -538,6 +560,16 @@ const texHealth = pixTex((i,j)=>{
 });
 
 function lam(map, extra){ return new THREE.MeshLambertMaterial(Object.assign({map}, extra||{})); }
+/* Minecraft directional face shading: top bright, N/S mid, E/W dim, bottom dark */
+function mcMats(sideTex, topTex, botTex, extra){
+  function m(tex, k){
+    const mm = new THREE.MeshLambertMaterial(Object.assign({map:tex}, extra||{}));
+    mm.color.setScalar(k);
+    return mm;
+  }
+  return [m(sideTex,0.72), m(sideTex,0.72), m(topTex||sideTex,1.0),
+          m(botTex||topTex||sideTex,0.55), m(sideTex,0.85), m(sideTex,0.85)];
+}
 
 /* ============================================================
    VOXEL TERRAIN
@@ -558,10 +590,7 @@ function voxTop(x, z){
 
 (function buildVoxelGround(){
   const boxGeo = new THREE.BoxGeometry(1, 3, 1);
-  const matTop = lam(texGrassTop), matSide = lam(texDirtSide), matBot = lam(texDirt);
-  matSide.color.setScalar(0.82);                          // MC-style face shading
-  matBot.color.setScalar(0.6);
-  const mats = [matSide, matSide, matTop, matBot, matSide, matSide];
+  const mats = mcMats(texDirtSide, texGrassTop, texDirt);
   /* count columns */
   const cols = [];
   for(let i=-VOX_R;i<VOX_R;i++) for(let j=-VOX_R;j<VOX_R;j++){
@@ -578,10 +607,10 @@ function voxTop(x, z){
     /* biome tint: dry meadow, sandy washes, stony patches */
     const n1 = Math.sin(x*0.11+1.3)*Math.cos(z*0.09);
     const n3 = Math.sin(x*0.07-1.1)*Math.sin(z*0.08+0.6);
-    col.setRGB(1,1,1);
-    if(n1 > 0.25) col.setRGB(1.08, 1.02, 0.78);          // sun-dried
-    if(n3 > 0.5)  col.setRGB(1.15, 1.08, 0.85);          // sandy
-    if(n1 < -0.55) col.setRGB(0.85, 0.95, 0.8);          // greener hollow
+    /* uniform MC green with only a whisper of variation */
+    const g2 = 0.97 + n1*0.03;
+    col.setRGB(g2, 1.0, g2*0.96);
+    if(n3 > 0.6) col.setRGB(1.0, 0.98, 0.9);             // faint dry patch
     inst.setColorAt(idx, col);
   });
   inst.instanceMatrix.needsUpdate = true;
@@ -590,7 +619,7 @@ function voxTop(x, z){
   scene.add(inst);
   /* matte plane far below the voxel rim for the horizon */
   const far = new THREE.Mesh(new THREE.PlaneGeometry(900, 900),
-    new THREE.MeshLambertMaterial({color:0x8c9a52}));
+    new THREE.MeshLambertMaterial({color:0x6fa348}));
   far.rotation.x = -Math.PI/2;
   far.position.y = -10.5;
   scene.add(far);
@@ -669,7 +698,8 @@ for(let i=0;i<44;i++){
   }
 }
 const rocksInst = (function(){
-  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), lam(texStone), rockMatrices.length);
+  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),
+    mcMats(texStone), rockMatrices.length);
   rockMatrices.forEach((m,i)=> inst.setMatrixAt(i,m));
   inst.instanceMatrix.needsUpdate = true;
   inst.castShadow = true; inst.receiveShadow = true;
@@ -706,75 +736,84 @@ function leafBlob(cx, cy, cz, r, ry, pine){
   }
 }
 
-/* ГОЛЕМ ДАБ — thick tapered trunk, log branches, multi-blob crown */
+/* канонска МС-крошна: 5×5 two layers + 3×3 cap with a plus-top */
+function mcCanopy(bx, cy, bz){
+  for(let dy=0; dy<2; dy++) for(let dx=-2; dx<=2; dx++) for(let dz=-2; dz<=2; dz++){
+    if(dx===0 && dz===0 && dy===0) continue;
+    if(Math.abs(dx)===2 && Math.abs(dz)===2 && Math.random()<0.5) continue;
+    addLeaf(bx+dx, cy+dy, bz+dz);
+  }
+  for(let dx=-1; dx<=1; dx++) for(let dz=-1; dz<=1; dz++){
+    if(Math.abs(dx)===1 && Math.abs(dz)===1) continue;          // plus shape
+    addLeaf(bx+dx, cy+2, bz+dz);
+    if(dx===0 && dz===0) addLeaf(bx, cy+3, bz);
+  }
+  for(let dx=-1; dx<=1; dx++) for(let dz=-1; dz<=1; dz++){
+    if(Math.abs(dx)===1 && Math.abs(dz)===1 && Math.random()<0.6) continue;
+    addLeaf(bx+dx, cy+2, bz+dz);
+  }
+}
+/* ДАБ — the classic oak: short trunk, full round canopy */
 function voxelOak(bx, bz){
   const g = voxTop(bx, bz);
-  const h = 7 + Math.floor(Math.random()*3);
-  const thick = Math.random() < 0.45;                    // some have a 2×2 base
-  for(let y=0;y<h;y++){
-    addLog(bx, g+0.5+y, bz);
-    if(thick && y < h*0.55){
-      addLog(bx+1, g+0.5+y, bz);
-      addLog(bx, g+0.5+y, bz+1);
-      addLog(bx+1, g+0.5+y, bz+1);
-    }
-  }
-  /* branches: log runs stepping out and up, each ending in a leaf blob */
-  const nBr = 3 + Math.floor(Math.random()*3);
+  if(Math.random() < 0.18){ voxelOldOak(bx, bz); return; }      // rare ancient oak
+  const h = 4 + Math.floor(Math.random()*3);
+  for(let y=0;y<h;y++) addLog(bx, g+0.5+y, bz);
+  mcCanopy(bx, g+0.5+h-1, bz);
+}
+/* СТАР ДАБ — thick trunk with log branches and clustered crowns */
+function voxelOldOak(bx, bz){
+  const g = voxTop(bx, bz);
+  const h = 6 + Math.floor(Math.random()*3);
+  for(let y=0;y<h;y++) addLog(bx, g+0.5+y, bz);
+  const nBr = 3 + Math.floor(Math.random()*2);
   for(let b=0; b<nBr; b++){
     const a = (b/nBr)*Math.PI*2 + Math.random()*0.8;
-    const len = 2 + Math.floor(Math.random()*3);
-    let px2 = bx, pz2 = bz, py2 = g+0.5+h-2-Math.floor(Math.random()*2);
-    for(let k=0;k<len;k++){
+    let px2 = bx, pz2 = bz, py2 = g+0.5+h-2;
+    for(let k=0;k<2;k++){
       px2 += Math.round(Math.cos(a)); pz2 += Math.round(Math.sin(a));
-      py2 += (k%2===0) ? 1 : 0;
+      py2 += 1;
       addBranchLog(px2, py2, pz2);
     }
-    leafBlob(px2, py2+1, pz2, 1.8+Math.random()*0.8, 1.5+Math.random()*0.5);
+    mcCanopy(px2, py2, pz2);
   }
-  /* central crown mass */
-  leafBlob(bx+(thick?0.5:0), g+0.5+h+1, bz+(thick?0.5:0), 2.6+Math.random()*0.9, 2.1+Math.random()*0.5);
+  mcCanopy(bx, g+0.5+h, bz);
 }
 
-/* ВИСОК БОР — bare trunk with layered foliage plates and gaps between */
+/* ВИСОК БОР — classic Minecraft spruce silhouette:
+   dense stacked layers r2/r1 with cut corners, compact tip, one bare gap low */
 function voxelSpruce(bx, bz){
   const g = voxTop(bx, bz);
-  const h = 9 + Math.floor(Math.random()*5);
+  const h = 8 + Math.floor(Math.random()*3);
   for(let y=0;y<h;y++) addLog(bx, g+0.5+y, bz);
-  /* plates start a third of the way up; radius shrinks toward the top */
-  let y = 3 + Math.floor(Math.random()*2);
-  let side = Math.random() < 0.5 ? 1 : -1;
-  while(y < h){
-    const t = y/h;
-    const rad = t < 0.55 ? 2 : 1;
-    /* slightly offset plates for a natural, uneven look */
-    const ox = Math.random()<0.4 ? side : 0; side *= -1;
-    for(let dx=-rad;dx<=rad;dx++) for(let dz=-rad;dz<=rad;dz++){
-      if(Math.abs(dx)===rad && Math.abs(dz)===rad && rad>1) continue;
-      if(Math.random() < 0.12) continue;
-      addLeaf(bx+dx+ox, g+0.5+y, bz+dz, true);
+  /* layers from the top down: tip, r1, r1, r2, r1, r2, r2 */
+  const layers = [
+    [h+1, 0], [h, 1], [h-1, 1], [h-2, 2], [h-3, 1], [h-4, 2], [h-5, 2]
+  ];
+  layers.forEach(L=>{
+    const y = g+0.5+L[0], rad = L[1];
+    if(rad === 0){ addLeaf(bx, y, bz, true); return; }
+    for(let dx=-rad; dx<=rad; dx++) for(let dz=-rad; dz<=rad; dz++){
+      if(dx===0 && dz===0 && L[0] < h) continue;               // trunk shows through
+      if(Math.abs(dx)===rad && Math.abs(dz)===rad && rad===2) continue;  // cut corners
+      addLeaf(bx+dx, y, bz+dz, true);
     }
-    y += 2;                                              // bare trunk between plates
-  }
-  addLeaf(bx, g+0.5+h, bz, true);
-  addLeaf(bx, g+0.5+h+1, bz, true);
+  });
 }
 
-/* ВИСОКА БРЕЗА — tall white trunk, crown only in the top third */
+/* БРЕЗА — MC birch: taller white trunk, standard canopy */
 function voxelBirch(bx, bz){
   const g = voxTop(bx, bz);
-  const h = 7 + Math.floor(Math.random()*3);
+  const h = 5 + Math.floor(Math.random()*3);
   for(let y=0;y<h;y++) addBirchLog(bx, g+0.5+y, bz);
-  leafBlob(bx, g+0.5+h-1, bz, 1.9+Math.random()*0.5, 1.4);
-  leafBlob(bx, g+0.5+h+1, bz, 1.4, 1.1);
+  mcCanopy(bx, g+0.5+h-1, bz);
 }
 
-/* МЛАД ДАБ — the old small round tree, for undergrowth variety */
+/* МЛАД ДАБ — small round bush-tree */
 function voxelYoungOak(bx, bz){
   const g = voxTop(bx, bz);
-  const h = 4 + Math.floor(Math.random()*2);
-  for(let y=0;y<h;y++) addLog(bx, g+0.5+y, bz);
-  leafBlob(bx, g+0.5+h, bz, 2.0, 1.6);
+  for(let y=0;y<3;y++) addLog(bx, g+0.5+y, bz);
+  mcCanopy(bx, g+0.5+2, bz);
 }
 (function plantForest(){
   let planted = 0, guard = 0;
@@ -787,12 +826,14 @@ function voxelYoungOak(bx, bz){
      pick < 0.75 ? voxelBirch : voxelYoungOak)(x, z);
     planted++;
   }
-  const logs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9,1,0.9), lam(texLog), logM.length);
+  const logs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9,1,0.9),
+    mcMats(texLog, texLogTop), logM.length);
   logM.forEach((m,i)=> logs.setMatrixAt(i,m));
   logs.instanceMatrix.needsUpdate = true;
   logs.castShadow = true;
   scene.add(logs);
-  const blogs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.8,1,0.8), lam(texBirch), birchM.length);
+  const blogs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.8,1,0.8),
+    mcMats(texBirch, texLogTop), birchM.length);
   birchM.forEach((m,i)=> blogs.setMatrixAt(i,m));
   blogs.instanceMatrix.needsUpdate = true;
   blogs.castShadow = true;
@@ -827,7 +868,7 @@ function scatterSprites(tex, count, rmin, rmax, size){
   inst.instanceMatrix.needsUpdate = true;
   scene.add(inst);
 }
-scatterSprites(texGrassSprite, 2600, 3, 88, 0.9);
+scatterSprites(texGrassSprite, 2400, 2, 48, 0.9);
 (function poppyFields(){
   /* poppies grow in patches, like real August meadows */
   const geo = new THREE.PlaneGeometry(0.8, 0.8);
@@ -855,8 +896,8 @@ scatterSprites(texGrassSprite, 2600, 3, 88, 0.9);
   inst.instanceMatrix.needsUpdate = true;
   scene.add(inst);
 })();
-scatterSprites(texDandelion,   240, 5, 80, 0.8);
-scatterSprites(texDeadBush,    180, 10, 90, 0.85);
+scatterSprites(texDandelion,   220, 4, 44, 0.8);
+scatterSprites(texDeadBush,    140, 8, 52, 0.85);
 
 /* leaf-block bushes nestled in the meadow */
 (function bushes(){
@@ -1000,10 +1041,10 @@ const clouds = [];
   buildChurch(-2, 70);
 
   /* build the instanced meshes and register them as bullet-stopping cover */
-  function inst(mats, tex, shade){
+  function inst(mats, tex, shade, faceShade){
     const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),
-      new THREE.MeshLambertMaterial({map:tex}), mats.length);
-    if(shade) mesh.material.color.setScalar(shade);
+      faceShade ? mcMats(tex) : new THREE.MeshLambertMaterial({map:tex}), mats.length);
+    if(shade && !faceShade) mesh.material.color.setScalar(shade);
     mats.forEach((m,i)=> mesh.setMatrixAt(i,m));
     mesh.instanceMatrix.needsUpdate = true;
     mesh.castShadow = true; mesh.receiveShadow = true;
@@ -1011,8 +1052,8 @@ const clouds = [];
     coverMeshes.push(mesh);
     return mesh;
   }
-  inst(stoneM, texStone, 0.92);
-  inst(wallM, texPlaster);
+  inst(stoneM, texStone, 0, true);
+  inst(wallM, texPlaster, 0, true);
   inst(roofM, texRoof);
   inst(winM, texWindow);
   inst(plankM, texPlank);
@@ -1220,6 +1261,7 @@ camera.add(flash);
 
 /* ---- the player's own body, seen when you look down ---- */
 const playerBody = new THREE.Group();
+playerBody.position.set(0, -0.42, 0);   // whole rig sits below the eye line
 (function buildPlayerBody(){
   /* torso in grey komita wool with a crossed bandolier */
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.28), komitaWoolM);
@@ -1805,7 +1847,7 @@ function startWave(){
   state.health = Math.min(100, state.health + 15);
   healthfill.style.width = Math.max(0,state.health) + '%';
   waveLabel.textContent = 'Бран ' + state.wave;
-  showMsg('БРАН ' + state.wave + ' ДОАЃА · подготви се', 2600);
+  showMsg('БРАН ' + state.wave + ' ДОАЃА · ПОДГОТВИ СЕ', 2600);
   /* a first-aid kit is dropped somewhere near the line each wave */
   if(state.wave > 1 && pickups.filter(p=>p.type==='health').length < 3){
     const a = Math.random()*Math.PI*2, r = 8 + Math.random()*16;
@@ -1852,9 +1894,9 @@ function gameOver(){
   state.running = false;
   const mins = ((performance.now()-state.startTime-state.pausedMs)/60000);
   $('finalstats').innerHTML =
-    'Поразени непријатели · enemies felled: <b>'+state.score+'</b><br>'+
-    'Браневи издржани · waves held: <b>'+state.wave+'</b><br>'+
-    'Каменот држан · stone held: <b>'+mins.toFixed(1)+' min</b>';
+    'Поразени непријатели: <b>'+state.score+'</b><br>'+
+    'Издржани бранови: <b>'+state.wave+'</b><br>'+
+    'Каменот држан: <b>'+mins.toFixed(1)+' мин</b>';
   const myId = recordScore(mins, state.score, state.wave);
   renderLeaderboard(myId);
   $('endscreen').classList.remove('hidden');
@@ -1897,7 +1939,7 @@ function renderLeaderboard(highlightId){
       '<td>'+e.score+' пораз.</td>'+
       '<td>бран '+e.wave+'</td></tr>';
   });
-  el.innerHTML = '<h2>Книга на одбраната · Leaderboard</h2>'+
+  el.innerHTML = '<h2>Книга на одбраната</h2>'+
     '<table><tr><th></th><th>дата</th><th>минути</th><th>порази</th><th>бран</th></tr>'+
     rows+'</table>';
 }
@@ -2116,7 +2158,7 @@ function updateAmmoHUD(){
     for(let k=0;k<W.mag;k++) pips += k < state.mag ? '●' : '○';
     ammoLabel.textContent = W.name + ' · ' + pips;
   } else {
-    ammoLabel.textContent = W.name + (state.reload > 0 ? ' · reloading…' : ' · ready');
+    ammoLabel.textContent = W.name + (state.reload > 0 ? ' · полни…' : ' · спремна');
   }
 }
 
@@ -2518,9 +2560,10 @@ function animate(){
     weaponGroup.rotation.x = swayX;
   }
 
-  /* show your own body only when looking down, so it never blocks the view */
-  playerBody.visible = state.pitch < -0.35;
-  playerBody.rotation.x = -state.pitch;                        // counter-rotate to stay upright-ish
+  /* show your own body only when looking down; damped counter-rotation,
+     pivoting from below the eye so the torso can never cross the near plane */
+  playerBody.visible = state.pitch < -0.5;
+  playerBody.rotation.x = THREE.MathUtils.clamp(-state.pitch * 0.8, 0, 0.85);
 
   if(state.running){
     if(state.toSpawn > 0){
