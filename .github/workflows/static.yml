@@ -34,17 +34,11 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Build site
-        run: npm run build
+        run: |
+          mkdir -p dist
+          cp mechkin-kamen.html dist/index.html
+          cp mechkin-kamen.html dist/mechkin-kamen.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
