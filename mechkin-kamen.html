@@ -179,7 +179,7 @@
   со илјадници аскери и артилерија. На карпите над градот, кај Мечкин Камен, застанува
   четата на војводата <b>Питу Гули</b>. Кога му предлагаат повлекување, тој одговара:
   „Овде ќе се умре!" Комитите ја бранат позицијата до последниот куршум — и до последниот човек.
-  Сега каменот е твој. Држи го колку што држи срцето. <b>Слобода или смрт.</b></p>
+  Сега каменот е твој. Издржи ги сите <b>десет бранови</b> на Бахтијар-паша — и Крушево е одбрането. Кога ќе те опколат, Питу Гули и борците ќе ти дојдат на помош. <b>Слобода или смрт.</b></p>
   <button class="bigbtn" id="startbtn">Започни</button>
   <div style="margin-top:18px;">
     <div class="setrow"><span>Осетливост</span>
@@ -1620,6 +1620,7 @@ function whizSound(){
    STATE & PHYSICS
    ============================================================ */
 const GRAVITY = 9.81, JUMP_V = 3.2;
+const FINAL_WAVE = 10;
 const EYE_BY_STANCE   = [1.7, 1.05, 0.42];
 const SPEED_BY_STANCE = [5.5, 2.6, 1.1];
 const HITMOD_BY_STANCE= [1.0, 0.55, 0.30];
@@ -1631,7 +1632,7 @@ const state = {
   spawnTimer:0, reload:0, zoom:false, recoil:0, shakeT:0, pitchKick:0,
   stance:0, eyeH:1.7, vy:0, airH:0, grounded:true, bobPhase:0, sprinting:false,
   groundY:0, moveSpeed:0, grenades:3, healthT:14, weapon:0, mag:5, coins:0,
-  combo:0, comboT:0, startTime:0, pausedMs:0, pauseAt:0
+  combo:0, comboT:0, won:false, alliesIn:false, startTime:0, pausedMs:0, pauseAt:0
 };
 
 const $ = id => document.getElementById(id);
@@ -1783,7 +1784,52 @@ const Music = (function(){
     droneNodes.forEach(n=>{ try{ n.stop ? n.stop() : n.disconnect(); }catch(e){} });
     droneNodes = [];
   }
-  return {start, stop};
+  /* ---- триумфална фанфара во Ре-дур, брзо оро 7/8 ---- */
+  function fanfareNote(t, midi, durE, E8, loud){
+    const dur = durE * E8;
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f(midi);
+    const o2 = ctx.createOscillator(); o2.type = 'square'; o2.frequency.value = f(midi-12);
+    const flt = ctx.createBiquadFilter(); flt.type = 'lowpass'; flt.frequency.value = 2200;
+    const g = ctx.createGain();
+    const v = loud || 0.13;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(v, t+0.03);
+    g.gain.setValueAtTime(v, t+Math.max(0.03, dur-0.1));
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    const g2 = ctx.createGain(); g2.gain.value = 0.3;
+    o.connect(flt); o2.connect(g2); g2.connect(flt); flt.connect(g); g.connect(master);
+    o.start(t); o2.start(t); o.stop(t+dur+0.05); o2.stop(t+dur+0.05);
+  }
+  function victory(){
+    try{
+      ensure();
+      if(ctx.state === 'suspended') ctx.resume();
+      const E8 = 0.185;                                // brisk oro tempo
+      let t = ctx.currentTime + 0.1;
+      /* D major, rising and ringing */
+      const TUNE = [
+        [74,3],[73,2],[71,2],  [69,3],[71,2],[73,2],
+        [74,2],[76,1],[74,2],[71,2],  [69,3],[66,2],[64,2],
+        [62,3],[66,2],[69,2],  [71,3],[73,2],[74,2],
+        [78,3],[76,2],[74,2],  [74,7]
+      ];
+      let e = 0;
+      TUNE.forEach(n=>{
+        fanfareNote(t + e*E8, n[0], n[1], E8);
+        e += n[1];
+      });
+      /* tapan driving underneath */
+      const bars = Math.ceil(e/7);
+      for(let b=0; b<bars; b++){
+        [[0,1],[3,0.6],[5,0.6]].forEach(d=> playDrum(t + (b*7+d[0])*E8, d[1]));
+      }
+      /* final D-major chord, long and bright */
+      const tf = t + e*E8;
+      [62, 66, 69, 74].forEach(m=> fanfareNote(tf, m, 10, E8, 0.09));
+      playDrum(tf, 1.2);
+    }catch(err){}
+  }
+  return {start, stop, victory};
 })();
 
 /* ============================================================
@@ -1842,12 +1888,14 @@ function tryJump(){
 
 function startWave(){
   state.wave++;
-  state.toSpawn = 3 + state.wave*2;
+  state.toSpawn = 4 + state.wave*3;
+  if(state.wave === FINAL_WAVE) state.toSpawn = 46;      // Бахтијар-паша со сè што има
   state.spawnTimer = 4;                      // breather: dig in before they come
   state.health = Math.min(100, state.health + 15);
   healthfill.style.width = Math.max(0,state.health) + '%';
-  waveLabel.textContent = 'Бран ' + state.wave;
-  showMsg('БРАН ' + state.wave + ' ДОАЃА · ПОДГОТВИ СЕ', 2600);
+  waveLabel.textContent = 'Бран ' + state.wave + '/' + FINAL_WAVE;
+  if(state.wave === FINAL_WAVE) showMsg('ГОЛЕМАТА БИТКА · ПОСЛЕДЕН БРАН', 3200);
+  else showMsg('БРАН ' + state.wave + ' ДОАЃА · ПОДГОТВИ СЕ', 2600);
   /* a first-aid kit is dropped somewhere near the line each wave */
   if(state.wave > 1 && pickups.filter(p=>p.type==='health').length < 3){
     const a = Math.random()*Math.PI*2, r = 8 + Math.random()*16;
@@ -1862,11 +1910,12 @@ function resetGame(){
   grenades.forEach(g=> scene.remove(g.mesh)); grenades.length = 0;
   shells.forEach(s=> scene.remove(s.mesh)); shells.length = 0;
   boulders.forEach(b=> scene.remove(b.mesh)); boulders.length = 0;
+  allies.forEach(a=> scene.remove(a.mesh)); allies.length = 0;
   Object.assign(state, {running:true, yaw:0, pitch:0, health:100, score:0,
     wave:0, toSpawn:0, spawnTimer:0, reload:0, zoom:false, recoil:0, shakeT:0,
     stance:0, eyeH:1.7, vy:0, airH:0, grounded:true, moveSpeed:0,
     grenades:3, healthT:14, weapon:0, mag:5, coins:0,
-    combo:0, comboT:0, pitchKick:0, sprinting:false, paused:false, pausedMs:0, clipping:false,
+    combo:0, comboT:0, pitchKick:0, sprinting:false, paused:false, pausedMs:0, clipping:false, won:false, alliesIn:false,
     groundY:voxTop(0.5,0.5), startTime:performance.now()});
   document.querySelectorAll('.wslot').forEach(b=> b.classList.toggle('on', b.dataset.w === '0'));
   dmgflash.classList.remove('lowhp');
@@ -1885,19 +1934,96 @@ function resetGame(){
   healthfill.style.width = '100%';
   scoreLabel.textContent = '0 пораз.';
   wgBaseY = 0.04; swayY = 0; swayX = 0;
+  handFlag.visible = false;
   updateAmmoHUD();
   crosshair.classList.remove('reloading');
   startWave();
 }
 
-function gameOver(){
+/* ============================================================
+   ПОБЕДА — знамето на Крушевската Република се крева,
+   а низ ридот ѕвони триумфална песна
+   ============================================================ */
+function republicFlagTex(){
+  /* red banner: arched СМРТ ИЛИ СВОБОДА above (as on the četa flag),
+     КРУШЕВСКА РЕПУБЛИКА across the centre, 1903 beneath */
+  const c = document.createElement('canvas'); c.width = 128; c.height = 80;
+  const x = c.getContext('2d');
+  x.fillStyle = '#a31f17'; x.fillRect(0,0,128,80);
+  x.fillStyle = '#7d140e';
+  for(let i=0;i<128;i+=4){ x.fillRect(i,0,2,2); x.fillRect(i,78,2,2); }
+  for(let j=0;j<80;j+=4){ x.fillRect(0,j,2,2); x.fillRect(126,j,2,2); }
+  /* arched motto */
+  x.fillStyle = '#e8c34a';
+  x.font = 'bold 9px monospace'; x.textAlign = 'center';
+  const arc = 'СМРТ ИЛИ СВОБОДА';
+  for(let k=0;k<arc.length;k++){
+    const a = -Math.PI*0.42 + (k/(arc.length-1))*Math.PI*0.84;
+    x.save();
+    x.translate(64 + Math.sin(a)*46, 30 - Math.cos(a)*20);
+    x.rotate(a*0.5);
+    x.fillText(arc[k], 0, 0);
+    x.restore();
+  }
+  x.fillStyle = '#f5ecd8';
+  x.font = 'bold 12px Georgia'; 
+  x.fillText('КРУШЕВСКА', 64, 44);
+  x.fillText('РЕПУБЛИКА', 64, 58);
+  x.fillStyle = '#e8c34a';
+  x.font = 'bold 10px monospace';
+  x.fillText('· 1903 ·', 64, 72);
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestMipmapLinearFilter;
+  return t;
+}
+/* hand-held banner you wave in first person */
+const handFlag = new THREE.Group();
+(function(){
+  const pole = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1.0, 0.03), lam(texLog));
+  pole.position.set(0, 0.1, 0); handFlag.add(pole);
+  const geo = new THREE.PlaneGeometry(0.85, 0.55, 12, 5);
+  geo.translate(0.425, 0, 0);
+  const cloth = new THREE.Mesh(geo,
+    new THREE.MeshLambertMaterial({map:republicFlagTex(), side:THREE.DoubleSide}));
+  cloth.position.set(0.02, 0.42, 0);
+  handFlag.add(cloth);
+  handFlag.userData.cloth = cloth;
+  handFlag.userData.base = geo.attributes.position.array.slice();
+  handFlag.position.set(0.28, -0.35, -0.6);
+  handFlag.rotation.z = -0.12;
+  handFlag.visible = false;
+  camera.add(handFlag);
+})();
+function victory(){
+  state.running = false;
+  state.won = true;
+  /* the great flag over the Kamen becomes the Republic's banner */
+  flagCloth.material.map = republicFlagTex();
+  flagCloth.material.needsUpdate = true;
+  /* you raise your own banner */
+  WEAPON_MODELS.forEach(m=> m.visible = false);
+  handFlag.visible = true;
+  showMsg('ПОБЕДА · КРУШЕВО Е ОДБРАНЕТО!', 4600);
+  Music.stop();
+  Music.victory();
+  setTimeout(()=>{ if(state.won) gameOver(true); }, 5200);
+}
+
+function gameOver(won){
   state.running = false;
   const mins = ((performance.now()-state.startTime-state.pausedMs)/60000);
   $('finalstats').innerHTML =
     'Поразени непријатели: <b>'+state.score+'</b><br>'+
     'Издржани бранови: <b>'+state.wave+'</b><br>'+
     'Каменот држан: <b>'+mins.toFixed(1)+' мин</b>';
-  const myId = recordScore(mins, state.score, state.wave);
+  if(won){
+    $('endtitle').innerHTML = 'СЛОБОДНО <span class="ck">КРУШЕВО</span>';
+    $('endsub').textContent = 'Каменот издржа. Знамето на Републиката се вее над градот.';
+  } else {
+    $('endtitle').innerHTML = 'ПАДНА <span class="ck">КАМЕНОТ</span>';
+    $('endsub').textContent = 'Тука, на 12 август 1903, падна Питу Гули со четата — но Мечкин Камен остана вечен спомен на слободата.';
+  }
+  const myId = recordScore(mins, state.score, state.wave, !!won);
   renderLeaderboard(myId);
   $('endscreen').classList.remove('hidden');
 }
@@ -1915,12 +2041,12 @@ function saveBoard(list){
   try{ localStorage.setItem(LB_KEY, JSON.stringify(list)); }
   catch(e){ window._lbMem = list; }                 // standalone fallback if storage is blocked
 }
-function recordScore(mins, score, wave){
+function recordScore(mins, score, wave, win){
   const list = loadBoard();
   const d = new Date();
   const date = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const id = Date.now();
-  list.push({id, date, mins:+mins.toFixed(1), score, wave});
+  list.push({id, date, mins:+mins.toFixed(1), score, wave, win:!!win});
   list.sort((a,b)=> b.mins - a.mins || b.score - a.score);   // longest defence first
   if(list.length > 10) list.length = 10;                     // keep top 10
   saveBoard(list);
@@ -1934,7 +2060,7 @@ function renderLeaderboard(highlightId){
   list.forEach((e, i)=>{
     rows += '<tr class="'+(e.id===highlightId?'me':'')+'">'+
       '<td class="rank">'+(i+1)+'</td>'+
-      '<td>'+e.date+'</td>'+
+      '<td>'+(e.win?'★ ':'')+e.date+'</td>'+
       '<td>'+e.mins.toFixed(1)+' мин</td>'+
       '<td>'+e.score+' пораз.</td>'+
       '<td>бран '+e.wave+'</td></tr>';
@@ -2236,6 +2362,77 @@ function killEnemy(en, headshot){
 }
 
 /* ============================================================
+   СОЈУЗНИЦИ — кога Турците ќе те опколат, пристигнува
+   Питу Гули со борците и заедно ја држите линијата
+   ============================================================ */
+const allies = [];
+const ALLY_DEFS = [
+  {name:'Питу Гули',    coat:0x7a6a48, cap:0x8f2b1f},
+  {name:'Никола Карев', coat:0x6b5a3e, cap:0x3a2c1c},
+  {name:'Даме Груев',   coat:0x4a4a44, cap:0x2a2a26},
+  {name:'комита',       coat:0x8a8268, cap:0x3a2c1c},
+  {name:'комита',       coat:0x5e5648, cap:0x2a2a26}
+];
+function buildAlly(def){
+  const g = new THREE.Group();
+  const coat = new THREE.MeshLambertMaterial({color:def.coat});
+  const dark = new THREE.MeshLambertMaterial({color:0x2a241a});
+  const capM = new THREE.MeshLambertMaterial({color:def.cap});
+  const skin = lam(texSkin), steel = new THREE.MeshLambertMaterial({color:0x4a4e55});
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.78,0.26), coat);
+  body.position.y = 1.12; g.add(body);
+  const bando = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.8,0.06), dark);
+  bando.position.set(0,1.12,0.14); bando.rotation.z = 0.5; g.add(bando);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.32,0.32,0.32),
+    [skin,skin,skin,skin,lam(texFace),skin]);
+  head.position.y = 1.68; g.add(head);
+  const kalpak = new THREE.Mesh(new THREE.BoxGeometry(0.36,0.2,0.36), capM);
+  kalpak.position.y = 1.95; g.add(kalpak);
+  function limb(mat,x,y){ const p=new THREE.Group(); p.position.set(x,y,0);
+    const b=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.6,0.16),mat); b.position.y=-0.3; p.add(b); return p; }
+  const armL=limb(coat,-0.33,1.45), armR=limb(coat,0.33,1.45),
+        legL=limb(dark,-0.13,0.74), legR=limb(dark,0.13,0.74);
+  g.add(armL,armR,legL,legR);
+  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.06,0.06,0.85), steel);
+  gun.position.set(0.33,1.2,-0.2); gun.rotation.x=-0.4; g.add(gun);
+  g.traverse(o=>{ if(o.isMesh) o.castShadow = true; });
+  g.userData = {armL,armR,legL,legR};
+  return g;
+}
+function spawnAllies(){
+  ALLY_DEFS.forEach((def, i)=>{
+    const mesh = buildAlly(def);
+    const ang = (i/ALLY_DEFS.length)*Math.PI - Math.PI*0.0;
+    const ox = Math.cos(ang)*4.2, oz = Math.sin(ang)*3 + 2.2;   // fan behind/beside you
+    const x = camera.position.x + ox, z = camera.position.z + oz;
+    mesh.position.set(x, voxTop(x,z), z);
+    scene.add(mesh);
+    allies.push({mesh, def, gy:voxTop(x,z),
+      fireTimer:0.8+Math.random()*1.5, walkPhase:Math.random()*6, offX:ox, offZ:oz});
+  });
+  showMsg('ПИТУ ГУЛИ И БОРЦИТЕ ПРИСТИГНУВААТ!', 2600);
+}
+function allyShoot(al){
+  let best=null, bd=1e9;
+  const ap = al.mesh.position;
+  enemies.forEach(en=>{
+    if(!en.alive) return;
+    const d = en.mesh.position.distanceTo(ap);
+    if(d < 65 && d < bd){
+      const m = new THREE.Vector3(ap.x, ap.y+1.5, ap.z);
+      if(clearLine(m, new THREE.Vector3(en.mesh.position.x, en.mesh.position.y+1.4, en.mesh.position.z))){
+        bd = d; best = en;
+      }
+    }
+  });
+  if(best){
+    shotSound(false);
+    puffAt(new THREE.Vector3(ap.x, ap.y+1.5, ap.z));
+    if(Math.random() < 0.55) killEnemy(best, false);
+  }
+}
+
+/* ============================================================
    ПАРИЧКИ + специјален напад „МЕЧКИН КАМЕН"
    collect 10 coins -> hurl a giant boulder that crushes everything
    ============================================================ */
@@ -2448,6 +2645,18 @@ function animate(){
     }
     fp.needsUpdate = true;
     flagCloth.geometry.computeVertexNormals();
+    if(handFlag.visible){
+      const hc = handFlag.userData.cloth;
+      const hp = hc.geometry.attributes.position;
+      const hb = handFlag.userData.base;
+      for(let i=0;i<hp.count;i++){
+        const bx = hb[i*3];
+        hp.setZ(i, Math.sin(bx*8 - ft*9)*0.09*(bx/0.85));
+      }
+      hp.needsUpdate = true;
+      /* and YOU wave it — the whole banner sweeps side to side */
+      handFlag.rotation.z = -0.12 + Math.sin(ft*2.6)*0.35;
+    }
   }
 
   if(state.running){
@@ -2570,7 +2779,7 @@ function animate(){
       state.spawnTimer -= dt;
       if(state.spawnTimer <= 0){
         spawnEnemy(); state.toSpawn--;
-        state.spawnTimer = Math.max(0.7, 2.4 - state.wave*0.15);
+        state.spawnTimer = Math.max(0.45, 2.4 - state.wave*0.18);
       }
     }
 
@@ -2725,6 +2934,43 @@ function animate(){
       }
     }
 
+    /* allies: hold beside you, face and fire at the nearest enemy */
+    allies.forEach(al=>{
+      const parts = al.mesh.userData;
+      const tx = camera.position.x + al.offX, tz = camera.position.z + al.offZ;
+      const p = al.mesh.position;
+      const dx = tx - p.x, dz = tz - p.z;
+      const d = Math.hypot(dx, dz);
+      let tgt=null, bd=1e9;
+      enemies.forEach(en=>{ if(en.alive){ const dd=en.mesh.position.distanceTo(p); if(dd<bd){bd=dd;tgt=en;} } });
+      if(tgt) al.mesh.rotation.y = Math.atan2(tgt.mesh.position.x - p.x, tgt.mesh.position.z - p.z);
+      if(d > 2.4){
+        al.walkPhase += dt*9;
+        const sp = Math.min(6.5, d*2);
+        const nx = p.x + dx/d * sp * dt, nz = p.z + dz/d * sp * dt;
+        if(!solidAt(nx, nz, 0.35)){ p.x = nx; p.z = nz; }
+        else if(!solidAt(nx, p.z, 0.35)){ p.x = nx; }
+        else if(!solidAt(p.x, nz, 0.35)){ p.z = nz; }
+        const gT = voxTop(p.x,p.z); al.gy += (gT-al.gy)*Math.min(1,dt*10); p.y = al.gy;
+        const sw = Math.sin(al.walkPhase);
+        parts.legL.rotation.x = -sw*0.6; parts.legR.rotation.x = sw*0.6;
+        parts.armL.rotation.x = sw*0.4;  parts.armR.rotation.x = -sw*0.4;
+      } else {
+        parts.legL.rotation.x = 0; parts.legR.rotation.x = 0;
+        parts.armR.rotation.x = -1.3; parts.armL.rotation.x = -1.0;
+      }
+      al.fireTimer -= dt;
+      if(al.fireTimer <= 0){
+        al.fireTimer = 1.2 + Math.random()*1.4;
+        allyShoot(al);
+      }
+    });
+    /* overwhelmed? the fighters come to your side */
+    if(!state.alliesIn && (alive + state.toSpawn >= 16 || state.wave >= 5)){
+      state.alliesIn = true;
+      spawnAllies();
+    }
+
     /* the great stone: huge arc, devastating impact */
     for(let i=boulders.length-1;i>=0;i--){
       const bo = boulders[i];
@@ -2794,7 +3040,8 @@ function animate(){
     dmgflash.classList.toggle('lowhp', state.health > 0 && state.health < 30);
 
     if(alive === 0 && state.toSpawn === 0 && state.health > 0){
-      startWave();
+      if(state.wave >= FINAL_WAVE) victory();
+      else startWave();
     }
 
     /* ---- radar: top-down blips, rotated so player's facing is "up" ---- */
@@ -2821,6 +3068,7 @@ function animate(){
         radarCtx.beginPath(); radarCtx.arc(px, py, size, 0, 7); radarCtx.fill();
       }
       enemies.forEach(en=>{ if(en.alive) blip(en.mesh.position.x, en.mesh.position.z, '#e23b2e', 2.6); });
+      allies.forEach(al=> blip(al.mesh.position.x, al.mesh.position.z, '#4aa3ff', 2.6));
       pickups.forEach(pk=>{
         const c = pk.type==='health' ? '#ffffff' : pk.type==='medal' ? '#e8c34a' : '#8fbf6a';
         blip(pk.mesh.position.x, pk.mesh.position.z, c, 2);
