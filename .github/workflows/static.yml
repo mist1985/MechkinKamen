@@ -37,8 +37,20 @@ jobs:
       - name: Prepare site
         run: |
           mkdir -p dist
-          cp mechkin-kamen.html dist/index.html
           cp mechkin-kamen.html dist/mechkin-kamen.html
+          cat > dist/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=./mechkin-kamen.html">
+            <title>Redirecting…</title>
+          </head>
+          <body>
+            <p><a href="./mechkin-kamen.html">Open Mechkin Kamen</a></p>
+          </body>
+          </html>
+          EOF
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
