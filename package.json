@@ -1,0 +1,23 @@
+{
+  "name": "mechkin-kamen",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Мечкин Камен — 1903. Одбраната на Крушевската Република.",
+  "scripts": {
+    "build": "node scripts/build-www.mjs",
+    "sync": "npm run build && cap sync android",
+    "open:android": "cap open android",
+    "run:android": "npm run sync && cap run android",
+    "serve": "python3 -m http.server 8123"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/screen-orientation": "^7.0.2",
+    "@capacitor/status-bar": "^7.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  }
+}

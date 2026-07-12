@@ -2,7 +2,9 @@
 <html lang="mk">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- viewport-fit=cover is what makes env(safe-area-inset-*) resolve; without it the
+     HUD's safe-area offsets collapse to 0 and the app letterboxes around a notch. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Мечкин Камен — 1903</title>
 <style>
   :root{
@@ -111,6 +113,56 @@
   #leaderboard tr.me td{color:var(--brass);}
   #leaderboard .rank{color:#a89878;width:1.6em;}
   #leaderboard .empty{color:#a89878;font-style:italic;font-size:12px;}
+
+  /* ============================================================
+     SHORT LANDSCAPE (phones held sideways).
+     The default HUD stacks controls up to 272px off the bottom edge, which
+     needs a tall viewport. A phone in landscape gives us barely 400px of CSS
+     height, so those bottom-anchored buttons climb into the top-anchored radar
+     and collide. Below, the right-hand controls are re-laid as a compact 3x2
+     thumb cluster and everything shrinks to fit.
+     ============================================================ */
+  @media (max-height: 560px) and (orientation: landscape){
+    /* right-hand thumb cluster: two rows, three columns, anchored bottom-right */
+    #firebtn  {width:72px;height:72px;right:14px;bottom:max(12px,env(safe-area-inset-bottom));font-size:12px;}
+    #firebtn .glyph{font-size:20px;}
+    #jumpbtn  {width:56px;height:56px;right:22px;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 80px);}
+    #zoombtn  {width:56px;height:56px;right:96px;bottom:max(12px,env(safe-area-inset-bottom));}
+    #nadebtn  {width:56px;height:56px;right:96px;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 68px);}
+    #stancebtn{width:56px;height:56px;right:162px;bottom:max(12px,env(safe-area-inset-bottom));}
+    #stonebtn {width:56px;height:56px;right:162px;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 68px);}
+    .tbtn{font-size:9px;letter-spacing:.06em;}
+
+    /* radar and weapon slots share the right edge above the cluster */
+    #radar   {width:72px;height:72px;top:calc(env(safe-area-inset-top) + 4px);right:12px;}
+    #radarlbl{top:calc(env(safe-area-inset-top) + 78px);right:12px;width:72px;font-size:8px;}
+    #wpnslots{right:12px;bottom:auto;top:calc(env(safe-area-inset-top) + 96px);gap:4px;}
+    .wslot{width:72px;height:26px;font-size:8px;}
+
+    /* left column: joystick at thumb height, readouts stacked above it */
+    #joystick{width:108px;height:108px;left:14px;bottom:max(12px,env(safe-area-inset-bottom));}
+    #joyknob {width:46px;height:46px;}
+    /* healthwrap is bar + caption (~30px tall), so the stack above it starts at
+       +164, not +152 — otherwise the stance label lands on the health bar. */
+    #healthwrap {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 128px);width:150px;}
+    #stancelabel{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 166px);}
+    #nadelabel  {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 184px);}
+    #coinlabel  {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 202px);}
+    #ammo       {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 220px);font-size:11px;}
+    #healthtext, #stancelabel, #nadelabel, #coinlabel{font-size:9px;}
+
+    #topbar{font-size:11px;padding:0 10px;}
+    .panel{padding:4px 8px;}
+
+    /* the briefing must scroll rather than overflow a 400px-tall screen */
+    .screen{padding:12px;overflow-y:auto;justify-content:flex-start;}
+    .screen h1{font-size:clamp(22px,5.5vw,34px);}
+    .screen .sub{font-size:12px;margin-bottom:12px;}
+    .screen p.brief{font-size:11px;line-height:1.5;margin-bottom:14px;max-width:none;}
+    .ornament{font-size:10px;margin-bottom:6px;}
+    .bigbtn{padding:10px 32px;font-size:14px;}
+    .controls-hint{margin-top:10px;font-size:9px;line-height:1.5;}
+  }
 </style>
 </head>
 <body>
@@ -204,20 +256,65 @@
   <button class="bigbtn" id="restartbtn">Уште еднаш</button>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- Bundled locally: a CDN fetch fails inside the packaged Android app and offline. -->
+<script src="./vendor/three.min.js"></script>
+<!-- Both no-op in a browser; only the packaged Android app has native plugins. -->
+<script src="./ads.js"></script>
+<script src="./native.js"></script>
+<script>window.Ads?.init();</script>
 <script>
 (function(){
 "use strict";
 
 /* ============================================================
+   QUALITY TIER
+   A phone GPU has a small fraction of a desktop's fill rate, and this scene
+   asks for a lot: soft shadows, a multi-pass bloom chain and a 2x pixel ratio.
+   Rendering fewer pixels is what buys the frame budget back, so the mobile tier
+   cuts resolution and shadow work first and leaves the art direction alone.
+   ============================================================ */
+const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  || (('ontouchstart' in window) && window.innerWidth < 1024);
+
+/* CAMERA_FAR is not a quality knob. The sky dome is a sphere of radius 480 and
+   the sun sits ~360 out, so anything less clips the sky away and leaves the
+   black clear-colour showing through. Fog, not the far plane, is what limits
+   how much terrain is actually visible. */
+const CAMERA_FAR = 600;
+
+const Q = IS_MOBILE ? {
+  antialias:    false,   // MSAA on a mobile GPU costs more than it returns
+  pixelRatio:   1.25,    // the single biggest win: ~2.5x fewer fragments than 2x
+  shadows:      true,
+  shadowMap:    1024,
+  shadowType:   THREE.PCFShadowMap,   // PCFSoft samples too many taps here
+  shadowExtent: 70,      // tighter frustum = more texel density from a smaller map
+  shadowFar:    200,
+  fogNear:      55, fogFar: 170,
+  bloomScale:   0.35,    // bloom render targets, as a fraction of screen size
+  bloomPasses:  1,
+} : {
+  antialias:    true,
+  pixelRatio:   2,
+  shadows:      true,
+  shadowMap:    2048,
+  shadowType:   THREE.PCFSoftShadowMap,
+  shadowExtent: 120,
+  shadowFar:    260,
+  fogNear:      80, fogFar: 260,
+  bloomScale:   0.5,
+  bloomPasses:  2,
+};
+
+/* ============================================================
    RENDERER
    ============================================================ */
 const container = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({antialias:Q.antialias, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, Q.pixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = Q.shadows;
+renderer.shadowMap.type = Q.shadowType;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -225,10 +322,10 @@ container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const SKY_TOP = 0x4f8de8, SKY_HOR = 0xd6e6f5;       // Minecraft-shader blue
-scene.fog = new THREE.Fog(SKY_HOR, 80, 260);
+scene.fog = new THREE.Fog(SKY_HOR, Q.fogNear, Q.fogFar);
 
 const BASE_FOV = 70, ZOOM_FOV = 32;
-const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth/window.innerHeight, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth/window.innerHeight, 0.1, CAMERA_FAR);
 camera.position.set(0, 1.7, 0);
 
 window.addEventListener('resize', ()=>{
@@ -274,11 +371,12 @@ window.addEventListener('resize', ()=>{
 scene.add(new THREE.HemisphereLight(0xdce8ff, 0x99895e, 0.72));   // sky fill + warm ground bounce
 const sun = new THREE.DirectionalLight(0xfff0d0, 1.25);           // strong warm key light
 sun.position.set(-60, 80, -40);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -120; sun.shadow.camera.right = 120;
-sun.shadow.camera.top = 120;   sun.shadow.camera.bottom = -120;
-sun.shadow.camera.near = 10;   sun.shadow.camera.far = 260;
+sun.castShadow = Q.shadows;
+sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
+const SH = Q.shadowExtent;
+sun.shadow.camera.left = -SH; sun.shadow.camera.right = SH;
+sun.shadow.camera.top = SH;   sun.shadow.camera.bottom = -SH;
+sun.shadow.camera.near = 10;   sun.shadow.camera.far = Q.shadowFar;
 sun.shadow.bias = -0.0012;
 sun.shadow.radius = 3;                                            // softer shadow edges
 scene.add(sun);
@@ -294,8 +392,11 @@ scene.add(fill);
 const Bloom = (function(){
   function rt(w,h){ return new THREE.WebGLRenderTarget(Math.max(1,w|0), Math.max(1,h|0),
     {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, format:THREE.RGBAFormat}); }
+  /* Bloom targets are rendered at a fraction of screen size — the blur hides
+     the lost resolution, and on mobile this is where most of the saving is. */
+  const S = Q.bloomScale;
   let W = window.innerWidth, H = window.innerHeight;
-  let half = {w:(W/2)|0, h:(H/2)|0};
+  let half = {w:(W*S)|0, h:(H*S)|0};
   let rtBase = rt(W,H), rtA = rt(half.w,half.h), rtB = rt(half.w,half.h);
   const quadScene = new THREE.Scene();
   const quadCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
@@ -331,7 +432,7 @@ const Bloom = (function(){
   }));
   function resize(){
     W = window.innerWidth; H = window.innerHeight;
-    half = {w:(W/2)|0, h:(H/2)|0};
+    half = {w:Math.max(1,(W*S)|0), h:Math.max(1,(H*S)|0)};
     rtBase.setSize(W,H); rtA.setSize(half.w,half.h); rtB.setSize(half.w,half.h);
     blurMat.uniforms.res.value.set(half.w, half.h);
   }
@@ -342,9 +443,9 @@ const Bloom = (function(){
     // bright extract -> rtA
     quad.material = brightMat; brightMat.uniforms.tDiffuse.value = rtBase.texture;
     renderer.setRenderTarget(rtA); renderer.render(quadScene, quadCam);
-    // blur H -> rtB, V -> rtA  (x2 for a soft, wide glow)
+    // blur H -> rtB, V -> rtA  (repeat for a softer, wider glow)
     quad.material = blurMat;
-    for(let i=0;i<2;i++){
+    for(let i=0;i<Q.bloomPasses;i++){
       blurMat.uniforms.tDiffuse.value = rtA.texture; blurMat.uniforms.dir.value.set(1,0);
       renderer.setRenderTarget(rtB); renderer.render(quadScene, quadCam);
       blurMat.uniforms.tDiffuse.value = rtB.texture; blurMat.uniforms.dir.value.set(0,1);
@@ -2026,6 +2127,7 @@ function gameOver(won){
   const myId = recordScore(mins, state.score, state.wave, !!won);
   renderLeaderboard(myId);
   $('endscreen').classList.remove('hidden');
+  window.Ads?.afterGame();   // fire-and-forget: the end screen is already up
 }
 
 /* ============================================================
@@ -2237,11 +2339,19 @@ function setZoom(on){
 }
 onTap(zoombtn, ()=> setZoom(!state.zoom));
 
-$('startbtn').addEventListener('click', ()=>{
-  try{ audio(); }catch(e){} if(settings.music) Music.start(); $('startscreen').classList.add('hidden'); resetGame();
+/* Ads sit at the edges of a battle, never inside one. Ads.beforeGame() resolves
+   even when the ad fails or is slow, so a bad network can never gate the game. */
+$('startbtn').addEventListener('click', async ()=>{
+  try{ audio(); }catch(e){}
+  $('startscreen').classList.add('hidden');
+  await window.Ads?.beforeGame();
+  if(settings.music) Music.start();
+  resetGame();
 });
-$('restartbtn').addEventListener('click', ()=>{
-  $('endscreen').classList.add('hidden'); resetGame();
+$('restartbtn').addEventListener('click', async ()=>{
+  $('endscreen').classList.add('hidden');
+  await window.Ads?.beforeGame();
+  resetGame();
 });
 
 /* ============================================================

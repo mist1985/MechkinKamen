@@ -1,0 +1,17 @@
+{
+  "appId": "com.mist1985.mechkinkamen",
+  "appName": "Мечкин Камен",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#15100a",
+      "showSpinner": false
+    }
+  }
+}

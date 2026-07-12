@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:hardwareAccelerated="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:resizeableActivity="false"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <!-- INTERNET is the only permission the game needs. Three.js is bundled, so
+         nothing is fetched at runtime — but the WebView bridge expects it.
+
+         The AdMob SDK is deliberately NOT installed for v1. Merely linking it
+         pulls in ACCESS_ADSERVICES_AD_ID / _ATTRIBUTION / _TOPICS, which oblige
+         a Play Data-safety declaration that the app collects an advertising id
+         — untrue while ads are off. See ads.js for how to turn ads back on. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- The game is a real-time 3D renderer; a device without GL ES 3 cannot run it. -->
+    <uses-feature
+        android:glEsVersion="0x00030000"
+        android:required="true" />
+</manifest>
