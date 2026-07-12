@@ -40,6 +40,7 @@ jobs:
           cp mechkin-kamen.html dist/mechkin-kamen.html
           cp ads.js dist/ads.js
           cp native.js dist/native.js
+          cp privacy.html dist/privacy.html
           cp -R vendor dist/vendor
           cat > dist/index.html <<'EOF'
           <!DOCTYPE html>
