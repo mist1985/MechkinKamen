@@ -468,6 +468,8 @@ const Q = IS_MOBILE ? {
   fogNear:      55, fogFar: 170,
   bloomScale:   0.35,    // bloom render targets, as a fraction of screen size
   bloomPasses:  1,
+  ssaoScale:    0.5,     // AO is blurred anyway, so half-res costs nothing visible
+  ssaoSamples:  8,
 } : {
   antialias:    true,
   pixelRatio:   2,
@@ -479,6 +481,8 @@ const Q = IS_MOBILE ? {
   fogNear:      80, fogFar: 260,
   bloomScale:   0.5,
   bloomPasses:  2,
+  ssaoScale:    0.6,
+  ssaoSamples:  14,
 };
 
 /* ============================================================
@@ -565,20 +569,151 @@ scene.add(fill);
    render scene -> extract bright -> blur -> composite with glow
    ============================================================ */
 const Bloom = (function(){
-  function rt(w,h){ return new THREE.WebGLRenderTarget(Math.max(1,w|0), Math.max(1,h|0),
-    {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, format:THREE.RGBAFormat}); }
-  /* Bloom targets are rendered at a fraction of screen size — the blur hides
-     the lost resolution, and on mobile this is where most of the saving is. */
-  const S = Q.bloomScale;
+  function rt(w,h,extra){ return new THREE.WebGLRenderTarget(Math.max(1,w|0), Math.max(1,h|0),
+    Object.assign({minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
+                   format:THREE.RGBAFormat}, extra||{})); }
+
+  const S = Q.bloomScale;      // bloom target scale
+  const A = Q.ssaoScale;       // AO target scale
   let W = window.innerWidth, H = window.innerHeight;
   let half = {w:(W*S)|0, h:(H*S)|0};
-  let rtBase = rt(W,H), rtA = rt(half.w,half.h), rtB = rt(half.w,half.h);
+  let ao   = {w:(W*A)|0, h:(H*A)|0};
+
+  /* The scene target now carries a depth buffer we can READ. That is the whole
+     unlock: with depth we can reconstruct view-space position per pixel, and
+     from that derive ambient occlusion — the contact shadow in every corner and
+     crevice that a flat-lit block world is missing. */
+  const depthTex = new THREE.DepthTexture(W, H);
+  /* 24-bit, NOT 16. Depth is distributed hyperbolically, and with near=0.1 /
+     far=600 a 16-bit buffer quantises view positions into visible steps. The AO
+     pass then takes a DERIVATIVE of those positions to get surface normals —
+     and differentiating quantised data amplifies the error into noise. That is
+     what produced the random blotches. */
+  depthTex.type = THREE.UnsignedIntType;
+  let rtBase = rt(W, H, {depthTexture: depthTex, depthBuffer: true});
+  let rtA  = rt(half.w, half.h);
+  let rtB  = rt(half.w, half.h);
+  let rtAO = rt(ao.w, ao.h);
+  let rtAO2= rt(ao.w, ao.h);
+
   const quadScene = new THREE.Scene();
   const quadCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2,2));
   quadScene.add(quad);
   const QUAD_OPTS = {depthTest:false, depthWrite:false, toneMapped:false};
   const VERT = 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }';
+
+  /* ---------- SSAO ----------
+     Hemisphere sampling in view space. The kernel is biased toward the origin so
+     samples cluster near the surface, which is where occlusion actually lives. */
+  const KN = Q.ssaoSamples;
+  const kernel = [];
+  for(let i=0;i<KN;i++){
+    const v = new THREE.Vector3(Math.random()*2-1, Math.random()*2-1, Math.random());
+    v.normalize();
+    const t = i / KN;
+    v.multiplyScalar(0.15 + 0.85*t*t);
+    kernel.push(v);
+  }
+
+  const ssaoMat = new THREE.ShaderMaterial(Object.assign({}, QUAD_OPTS, {
+    defines:{ KN: KN },
+    uniforms:{
+      tDepth:{value:null},
+      projInv:{value:new THREE.Matrix4()},
+      proj:{value:new THREE.Matrix4()},
+      texel:{value:new THREE.Vector2()},
+      kernel:{value:kernel},
+      radius:{value:0.9},   // tight: we want contact shadows in corners, not murk
+      bias:{value:0.02},
+      power:{value:1.0},
+    },
+    vertexShader:VERT,
+    fragmentShader:[
+      'uniform sampler2D tDepth;',
+      'uniform mat4 projInv, proj;',
+      'uniform vec2 texel;',
+      'uniform vec3 kernel[KN];',
+      'uniform float radius, bias, power;',
+      'varying vec2 vUv;',
+      /* Rebuild the view-space position a pixel came from, using the stored
+         depth and the inverse projection. */
+      'vec3 viewPos(vec2 uv){',
+      '  float d = texture2D(tDepth, uv).x;',
+      '  vec4 clip = vec4(uv*2.0-1.0, d*2.0-1.0, 1.0);',
+      '  vec4 v = projInv * clip;',
+      '  return v.xyz / v.w;',
+      '}',
+      'void main(){',
+      '  float d = texture2D(tDepth, vUv).x;',
+      /* The sky has no geometry. Occluding it would draw a dark halo along every
+         silhouette. Leave it alone. */
+      '  if(d >= 0.9999){ gl_FragColor = vec4(1.0); return; }',
+      '  vec3 P = viewPos(vUv);',
+      /* NORMALS WITHOUT DERIVATIVES.
+         dFdx/dFdy of a reconstructed position amplifies every bit of depth
+         quantisation into noise, and straddles silhouettes — two surfaces at
+         different depths get averaged into a normal belonging to neither.
+         Instead, take both neighbours on each axis and keep the one CLOSER in
+         depth: that is the one on the same surface as us. Edges stop bleeding
+         and the result is stable. */
+      '  vec3 pR = viewPos(vUv + vec2(texel.x, 0.0));',
+      '  vec3 pL = viewPos(vUv - vec2(texel.x, 0.0));',
+      '  vec3 pU = viewPos(vUv + vec2(0.0, texel.y));',
+      '  vec3 pD = viewPos(vUv - vec2(0.0, texel.y));',
+      '  vec3 dx = (abs(pR.z - P.z) < abs(P.z - pL.z)) ? (pR - P) : (P - pL);',
+      '  vec3 dy = (abs(pU.z - P.z) < abs(P.z - pD.z)) ? (pU - P) : (P - pD);',
+      '  vec3 N = normalize(cross(dx, dy));',
+      '  if(dot(N, -normalize(P)) < 0.0) N = -N;',
+      /* INTERLEAVED SAMPLING, NOT RANDOM.
+         A per-pixel random rotation makes every pixel an independent estimate,
+         so the image crawls with grain that no blur fully removes. Instead give
+         each pixel of a 4x4 tile one of 16 FIXED rotations. The 4x4 blur below
+         then averages exactly one complete set — the noise cancels by
+         construction rather than by luck. */
+      '  vec2 tile = mod(gl_FragCoord.xy, 4.0);',
+      '  float ang = (tile.x + 4.0 * tile.y) * (6.2831853 / 16.0);',
+      '  vec3 rv = vec3(cos(ang), sin(ang), 0.0);',
+      '  vec3 T = normalize(rv - N * dot(rv, N));',
+      '  mat3 TBN = mat3(T, cross(N, T), N);',
+      '  float occ = 0.0;',
+      '  for(int i=0;i<KN;i++){',
+      '    vec3 sp = P + (TBN * kernel[i]) * radius;',
+      '    vec4 off = proj * vec4(sp, 1.0);',
+      '    vec2 suv = (off.xy / off.w) * 0.5 + 0.5;',
+      '    if(suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) continue;',
+      '    float sceneZ = viewPos(suv).z;',
+      /* Occluded when the real surface at that pixel sits IN FRONT of our sample
+         point. The range check stops a distant wall darkening a near one. */
+      '    float rangeCheck = smoothstep(0.0, 1.0, radius / max(0.0001, abs(P.z - sceneZ)));',
+      '    if(sceneZ >= sp.z + bias) occ += rangeCheck;',
+      '  }',
+      '  float a = 1.0 - (occ / float(KN));',
+      '  gl_FragColor = vec4(vec3(pow(clamp(a,0.0,1.0), power)), 1.0);',
+      '}'
+    ].join('\n')
+  }));
+
+  /* The blur is 4x4 and NOT 5x5 on purpose: the AO pass rotates its kernel by one
+     of 16 fixed angles across each 4x4 tile, so averaging a 4x4 neighbourhood
+     sums exactly one complete set of rotations. The noise then cancels
+     arithmetically. A 5x5 window would double-count some angles and leave a
+     residual pattern behind. */
+  const aoBlurMat = new THREE.ShaderMaterial(Object.assign({}, QUAD_OPTS, {
+    uniforms:{ tAO:{value:null}, texel:{value:new THREE.Vector2()} },
+    vertexShader:VERT,
+    fragmentShader:[
+      'uniform sampler2D tAO; uniform vec2 texel; varying vec2 vUv;',
+      'void main(){',
+      '  float s = 0.0;',
+      '  for(int x=-2;x<=1;x++)',
+      '    for(int y=-2;y<=1;y++)',
+      '      s += texture2D(tAO, vUv + vec2(float(x), float(y)) * texel).r;',
+      '  gl_FragColor = vec4(vec3(s / 16.0), 1.0);',
+      '}'
+    ].join('\n')
+  }));
+
   const brightMat = new THREE.ShaderMaterial(Object.assign({}, QUAD_OPTS, {
     uniforms:{tDiffuse:{value:null}, threshold:{value:0.84}},
     vertexShader:VERT,
@@ -595,30 +730,86 @@ const Bloom = (function(){
       's+=texture2D(tDiffuse,vUv+px*3.231)*0.070; s+=texture2D(tDiffuse,vUv-px*3.231)*0.070;'+
       'gl_FragColor=vec4(s.rgb,1.); }'
   }));
+
+  /* ---------- composite + grade ----------
+     The old composite was bloom + a saturation nudge, which is why the scene
+     read flat and washed out. This one shapes the image: AO multiplies in the
+     crevices, contrast is pulled around a filmic pivot, shadows go cool and
+     highlights warm (the oldest trick in colour grading — it reads as sunlight),
+     and a vignette settles the eye on the centre. */
   const compMat = new THREE.ShaderMaterial(Object.assign({}, QUAD_OPTS, {
-    uniforms:{tBase:{value:null}, tBloom:{value:null}, strength:{value:0.55}},
+    uniforms:{
+      tBase:{value:null}, tBloom:{value:null}, tAO:{value:null},
+      strength:{value:0.55},
+      /* AO should read as a contact shadow tucked into corners, not as a grey
+         wash over the whole image. 0.5 darkens creases and leaves open faces
+         alone; the earlier 0.85 was doing far too much of the lighting. */
+      aoStrength:{value:0.5},
+      contrast:{value:1.10},
+      saturation:{value:1.18},
+      vignette:{value:0.28},
+    },
     vertexShader:VERT,
-    fragmentShader:'uniform sampler2D tBase; uniform sampler2D tBloom; uniform float strength; varying vec2 vUv;'+
-      'void main(){ vec3 b=texture2D(tBase,vUv).rgb; vec3 g=texture2D(tBloom,vUv).rgb;'+
-      'vec3 c = b + g*strength;'+
-      'float l = dot(c, vec3(0.299,0.587,0.114));'+
-      'c = mix(vec3(l), c, 1.14);'+                       // saturation lift
-      'gl_FragColor=vec4(c, 1.); }'
+    fragmentShader:[
+      'uniform sampler2D tBase, tBloom, tAO;',
+      'uniform float strength, aoStrength, contrast, saturation, vignette;',
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vec3 c = texture2D(tBase, vUv).rgb;',
+      '  float ao = texture2D(tAO, vUv).r;',
+      '  c *= mix(1.0, ao, aoStrength);',
+      '  c += texture2D(tBloom, vUv).rgb * strength;',
+      '  float l = dot(c, vec3(0.299,0.587,0.114));',
+      '  c = mix(vec3(l), c, saturation);',
+      '  c = (c - 0.5) * contrast + 0.5;',
+      /* split tone: cool the shadows, warm the lights */
+      '  vec3 shadowTint    = vec3(0.94, 0.97, 1.06);',
+      '  vec3 highlightTint = vec3(1.06, 1.01, 0.93);',
+      '  c *= mix(shadowTint, highlightTint, smoothstep(0.15, 0.85, l));',
+      '  float v = smoothstep(1.15, 0.40, length(vUv - 0.5));',
+      '  c *= mix(1.0, v, vignette);',
+      '  gl_FragColor = vec4(max(c, 0.0), 1.0);',
+      '}'
+    ].join('\n')
   }));
+
+  /* A flat white AO texture, used when AO is switched off, so the composite
+     shader never needs a second variant. */
+  const whiteAO = new THREE.DataTexture(new Uint8Array([255,255,255,255]), 1, 1, THREE.RGBAFormat);
+  whiteAO.needsUpdate = true;
+
   function resize(){
     W = window.innerWidth; H = window.innerHeight;
     half = {w:Math.max(1,(W*S)|0), h:Math.max(1,(H*S)|0)};
-    rtBase.setSize(W,H); rtA.setSize(half.w,half.h); rtB.setSize(half.w,half.h);
+    ao   = {w:Math.max(1,(W*A)|0), h:Math.max(1,(H*A)|0)};
+    rtBase.setSize(W,H);
+    rtA.setSize(half.w,half.h); rtB.setSize(half.w,half.h);
+    rtAO.setSize(ao.w,ao.h);    rtAO2.setSize(ao.w,ao.h);
     blurMat.uniforms.res.value.set(half.w, half.h);
   }
+
   function render(){
-    const pr = renderer.getPixelRatio();
-    // base scene
+    // base scene, with depth retained for the AO pass
     renderer.setRenderTarget(rtBase); renderer.clear(); renderer.render(scene, camera);
-    // bright extract -> rtA
+
+    // --- ambient occlusion ---
+    if(settings.ssao){
+      quad.material = ssaoMat;
+      ssaoMat.uniforms.tDepth.value = depthTex;
+      ssaoMat.uniforms.proj.value.copy(camera.projectionMatrix);
+      ssaoMat.uniforms.projInv.value.copy(camera.projectionMatrixInverse);
+      ssaoMat.uniforms.texel.value.set(1/ao.w, 1/ao.h);
+      renderer.setRenderTarget(rtAO); renderer.render(quadScene, quadCam);
+
+      quad.material = aoBlurMat;
+      aoBlurMat.uniforms.tAO.value = rtAO.texture;
+      aoBlurMat.uniforms.texel.value.set(1/ao.w, 1/ao.h);
+      renderer.setRenderTarget(rtAO2); renderer.render(quadScene, quadCam);
+    }
+
+    // --- bloom ---
     quad.material = brightMat; brightMat.uniforms.tDiffuse.value = rtBase.texture;
     renderer.setRenderTarget(rtA); renderer.render(quadScene, quadCam);
-    // blur H -> rtB, V -> rtA  (repeat for a softer, wider glow)
     quad.material = blurMat;
     for(let i=0;i<Q.bloomPasses;i++){
       blurMat.uniforms.tDiffuse.value = rtA.texture; blurMat.uniforms.dir.value.set(1,0);
@@ -626,10 +817,13 @@ const Bloom = (function(){
       blurMat.uniforms.tDiffuse.value = rtB.texture; blurMat.uniforms.dir.value.set(0,1);
       renderer.setRenderTarget(rtA); renderer.render(quadScene, quadCam);
     }
-    // composite to screen
+
+    // --- composite + grade to screen ---
     quad.material = compMat;
     compMat.uniforms.tBase.value = rtBase.texture;
     compMat.uniforms.tBloom.value = rtA.texture;
+    compMat.uniforms.tAO.value = settings.ssao ? rtAO2.texture : whiteAO;
+    compMat.uniforms.strength.value = settings.bloom ? 0.55 : 0.0;
     renderer.setRenderTarget(null); renderer.render(quadScene, quadCam);
   }
   return {render, resize, ok:true};
@@ -1974,8 +2168,27 @@ const remainLabel = $('remain-label'), dmgDir = $('dmgdir');
    SETTINGS — persisted; sensitivity / bloom / sound
    ============================================================ */
 const settings = (function(){
-  let s = {sens:1, bloom:true, sound:true, music:true};
+  let s = {sens:1, bloom:true, ssao:false, sound:true, music:true};
   try{ Object.assign(s, JSON.parse(localStorage.getItem('mkSettings'))||{}); }catch(e){}
+
+  /* SSAO IS OFF, DELIBERATELY. The pass works and is left in the code, but it is
+     the wrong technique for this scene and it is not shipping.
+
+     The terrain is a stepped voxel field almost always viewed at a grazing angle
+     — you are looking ALONG the ground, not down at it. Depth then changes
+     enormously between neighbouring pixels, which is the worst case for AO
+     reconstructed from a depth buffer: both the normal estimate and the range
+     check degrade precisely where the player spends most of their time looking.
+     At half resolution there are also too few depth samples to describe the
+     terraces, and the result is horizontal banding across the grass.
+
+     The right fix for a voxel world is baked per-vertex AO (what Minecraft's
+     "smooth lighting" actually is): computed once from each block's neighbours,
+     free at runtime, and with no noise or view-dependence at all. That needs the
+     instanced world geometry reworked to carry a per-vertex AO attribute — a
+     real job, not a shader tweak. Forced off here so a stale localStorage value
+     cannot switch it back on. */
+  s.ssao = false;
   return s;
 })();
 function saveSettings(){ try{ localStorage.setItem('mkSettings', JSON.stringify(settings)); }catch(e){} }
@@ -2187,9 +2400,13 @@ function perfSample(ms){
   if(perf.n >= 90){
     const avg = perf.acc / perf.n;
     perf.acc = 0; perf.n = 0;
-    if(avg > 40 && perf.level === 0){ perf.level = 1; settings.bloom = false; }
-    else if(avg > 40 && perf.level === 1){
-      perf.level = 2;
+    /* Shed the most expensive effect first and the cheapest last. AO is a full
+       extra pass plus a blur, so it goes before bloom; resolution is the last
+       resort because dropping it is the most visible. */
+    if(avg > 40 && perf.level === 0){ perf.level = 1; settings.ssao = false; }
+    else if(avg > 40 && perf.level === 1){ perf.level = 2; settings.bloom = false; }
+    else if(avg > 40 && perf.level === 2){
+      perf.level = 3;
       renderer.setPixelRatio(1);
       if(Bloom) Bloom.resize();
     }
@@ -2946,7 +3163,7 @@ function animate(){
   const dt = Math.min(clock.getDelta(), 0.05);
   perfSample(dt*1000);
   if(state.paused){
-    if(settings.bloom && Bloom && Bloom.ok) Bloom.render(); else renderer.render(scene, camera);
+    drawFrame();
     return;
   }
 
@@ -3450,7 +3667,16 @@ function animate(){
     if(pf.t > 0.85){ pf.active = false; pf.m.visible = false; }
   }
 
-  if(settings.bloom && Bloom && Bloom.ok) Bloom.render();
+  drawFrame();
+}
+
+/* The post chain now carries AO and the colour grade as well as bloom, so it has
+   to run even when bloom is off — otherwise switching bloom off would silently
+   drop the grading and the occlusion with it. Bloom is faded inside the
+   composite instead (strength -> 0). Only a lost context falls back to a raw
+   render. */
+function drawFrame(){
+  if(Bloom && Bloom.ok) Bloom.render();
   else renderer.render(scene, camera);
 }
 animate();
