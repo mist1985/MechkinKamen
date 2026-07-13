@@ -1638,6 +1638,56 @@ function buildAsker(officer){
 }
 
 let squadBearing = -Math.PI/2, squadLeft = 0;
+/* Finds a spawn point on a bearing from the player that is NOT inside solid
+   geometry, and never gives up and returns a blocked one.
+
+   This used to try 8 bearings and then spawn regardless. An asker dropped inside
+   a rock or a house wall has every direction blocked, so it can never close on
+   the player, never gets shot, and never dies — and since a wave only ends when
+   `alive` reaches 0, one such asker soft-locks the game forever. */
+function findSpawnPos(bearing){
+  for(let tries=0; tries<24; tries++){
+    /* widen the cone as we retry, so a blocked bearing is escaped rather than
+       hammered 24 times */
+    const a = bearing + (Math.random()-0.5)*(0.35 + tries*0.14);
+    const r = 62 + Math.random()*20;
+    /* pressure follows the player: spawn relative to where YOU are */
+    let x = camera.position.x + Math.cos(a)*r;
+    let z = camera.position.z + Math.sin(a)*r;
+    const rr = Math.hypot(x, z);
+    if(rr > VOX_R-6){ x *= (VOX_R-6)/rr; z *= (VOX_R-6)/rr; }
+    if(!cellBlocked(x, z) && !solidAt(x, z, 0.5)) return {x, z};
+  }
+  /* Last resort: sweep a full ring around the player and take the first clear
+     cell. Returning a blocked position is not an option. */
+  for(let k=0; k<72; k++){
+    const a = (k/72) * Math.PI * 2;
+    for(const r of [58, 70, 46, 80]){
+      let x = camera.position.x + Math.cos(a)*r;
+      let z = camera.position.z + Math.sin(a)*r;
+      const rr = Math.hypot(x, z);
+      if(rr > VOX_R-6){ x *= (VOX_R-6)/rr; z *= (VOX_R-6)/rr; }
+      if(!cellBlocked(x, z) && !solidAt(x, z, 0.5)) return {x, z};
+    }
+  }
+  return {x: camera.position.x + 40, z: camera.position.z};
+}
+
+/* Watchdog escape hatch: lift a wedged asker out and put it back in the fight.
+   Killing it instead would hand the player a free frag they did not earn. */
+function relocateEnemy(en){
+  const pos = findSpawnPos(squadBearing);
+  const gy = voxTop(pos.x, pos.z);
+  en.mesh.position.set(pos.x, gy, pos.z);
+  en.gy = gy;
+  /* Both watchdogs must reset, and bestDist has to forget the old position —
+     otherwise the fresh spawn is instantly judged "no progress" against a
+     distance it can never beat, and it would be relocated again on a loop. */
+  en.stuckT = 0;
+  en.noProgressT = 0;
+  en.bestDist = Infinity;
+}
+
 function spawnEnemy(){
   /* squads: 2–4 men come from the same bearing before it shifts */
   if(squadLeft <= 0){
@@ -1647,22 +1697,13 @@ function spawnEnemy(){
   squadLeft--;
   const officer = Math.random() < 0.12;
   const mesh = buildAsker(officer);
-  let x = 0, z = 0;
-  for(let tries=0; tries<8; tries++){
-    const a = squadBearing + (Math.random()-0.5)*0.35;
-    const r = 62 + Math.random()*20;
-    /* pressure follows the player: spawn relative to where YOU are */
-    x = camera.position.x + Math.cos(a)*r;
-    z = camera.position.z + Math.sin(a)*r;
-    const rr = Math.hypot(x, z);
-    if(rr > VOX_R-6){ x *= (VOX_R-6)/rr; z *= (VOX_R-6)/rr; }
-    if(!cellBlocked(x, z)) break;
-  }
+  const spawn = findSpawnPos(squadBearing);
+  const x = spawn.x, z = spawn.z;
   const gy = voxTop(x,z);
   mesh.position.set(x, gy, z);
   scene.add(mesh);
   enemies.push({
-    mesh, alive:true, gy, officer,
+    mesh, alive:true, gy, officer, stuckT:0, noProgressT:0, bestDist:Infinity,
     speed: (officer ? 4.2 : 3.2) + Math.random()*1.6 + state.wave*0.25,
     accMod: officer ? 1.45 : 1,
     fireTimer: 2 + Math.random()*3,
@@ -3128,6 +3169,7 @@ function animate(){
           const c = Math.cos(wob), sn = Math.sin(wob);
           mvx = fwd.x*c - fwd.z*sn; mvz = fwd.x*sn + fwd.z*c;
         }
+        const px0 = p.x, pz0 = p.z;
         const nx = p.x + mvx * en.speed * dt;
         const nz = p.z + mvz * en.speed * dt;
         /* solid world: slide around rocks and trunks, flank via a preferred side */
@@ -3140,6 +3182,31 @@ function animate(){
           if(!solidAt(sx, sz, 0.4)){ p.x = sx; p.z = sz; }
           else en.strafeDir *= -1;                     // dead end: try the other side
         }
+
+        /* STUCK WATCHDOG.
+           Every branch above can fail at once — an asker wedged inside geometry
+           has nowhere to step, so it flips strafeDir forever and stands still.
+           It then never reaches the player, never gets shot and never dies; and
+           because a wave only ends when `alive` hits 0, that single asker
+           soft-locks the run. This is the only thing standing between the player
+           and a game that simply stops.
+
+           Only counted while the asker is actively trying to walk — standing to
+           aim, or already at the player's throat, is not being stuck. */
+        const moved = Math.hypot(p.x - px0, p.z - pz0);
+        if(moved < en.speed * dt * 0.2) en.stuckT += dt;
+        else en.stuckT = 0;
+        if(en.stuckT > 3.5){ relocateEnemy(en); return; }
+
+        /* Second net: an asker can keep MOVING and still never arrive — bouncing
+           between two blocked cells, or orbiting a wall forever. That defeats the
+           check above, which only sees motion. So also track whether it is
+           actually getting closer. At 3+ units/sec, 15 seconds without gaining
+           half a unit on the player means it is never going to. */
+        if(dist < en.bestDist - 0.5){ en.bestDist = dist; en.noProgressT = 0; }
+        else en.noProgressT += dt;
+        if(en.noProgressT > 15){ relocateEnemy(en); en.bestDist = Infinity; en.noProgressT = 0; return; }
+
         const gT = voxTop(p.x, p.z);
         en.gy += (gT - en.gy) * Math.min(1, dt*10);
         en.kneel = Math.max(0, en.kneel - dt*4);
