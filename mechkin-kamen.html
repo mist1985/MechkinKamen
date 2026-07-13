@@ -17,6 +17,11 @@
   canvas{display:block;image-rendering:pixelated;}
 
   #hud{position:fixed;inset:0;pointer-events:none;color:var(--bone);}
+  /* The HUD sits over a bright sky as often as over dark ground, so bone-on-
+     nothing washes out. A hard shadow keeps every readout legible on both. */
+  #ammo,#stancelabel,#nadelabel,#coinlabel,#healthtext,#radarlbl{
+    text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 1px rgba(0,0,0,.9);}
+  #ammo{font-weight:600;}
   #crosshair{position:absolute;left:50%;top:50%;width:46px;height:46px;transform:translate(-50%,-50%);}
   #crosshair line{stroke:var(--bone);stroke-width:2;opacity:.9;}
   #crosshair.reloading line{stroke:var(--brass);}
@@ -50,25 +55,81 @@
   #radarlbl{position:absolute;top:max(152px,calc(env(safe-area-inset-top) + 142px));right:14px;width:96px;
     text-align:center;font-size:9px;letter-spacing:.18em;color:var(--brass);text-transform:uppercase;}
 
-  .tbtn{position:fixed;pointer-events:auto;border-radius:8px;border:2px solid rgba(232,220,196,.5);
-    background:rgba(20,14,8,.45);color:var(--bone);font-family:inherit;display:flex;align-items:center;
-    justify-content:center;flex-direction:column;font-size:11px;letter-spacing:.1em;text-transform:uppercase;}
-  .tbtn:active{background:rgba(143,43,31,.5);}
-  #firebtn{right:18px;bottom:max(18px,env(safe-area-inset-bottom));width:84px;height:84px;font-size:13px;
-    letter-spacing:.12em;border-color:rgba(192,138,62,.7);}
-  #firebtn .glyph{font-size:24px;line-height:1;}
-  #zoombtn{right:118px;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 8px);width:62px;height:62px;}
-  #zoombtn.on{background:rgba(192,138,62,.45);}
-  #wpnbtn{right:118px;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 178px);width:62px;height:62px;
-    border-color:rgba(192,138,62,.7);font-size:9px;}
-  #jumpbtn{right:18px;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 116px);width:62px;height:62px;}
-  #nadebtn{right:18px;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 186px);width:62px;height:62px;
-    border-color:rgba(143,43,31,.8);}
-  #stancebtn{right:118px;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 100px);width:62px;height:62px;}
+  /* ============================================================
+     TOUCH CONTROLS
+
+     Georgia is right for the briefing and the end screens — it carries the
+     period. It is wrong for a HUD: a serif at 9px over a moving 3D scene is
+     slow to read. The HUD uses the system UI face instead, which ships a
+     Cyrillic set tuned for small sizes on every Android device.
+
+     Buttons are sized and placed by how often they are pressed, not by tidiness:
+       - ОГАН is the primary action, so it is the biggest target and sits in the
+         corner the thumb already rests on (Fitts's law: least travel, most area).
+       - The rest fan outward along the thumb's natural arc, shrinking with
+         frequency of use.
+       - Every gap is >=10px. Adjacent targets closer than that produce mis-taps,
+         and a mis-tapped grenade in a firefight is worse than a slow one.
+     ============================================================ */
+  :root{ --hud-font: system-ui, 'Roboto', 'Noto Sans', 'Segoe UI', sans-serif; }
+  #hud, .tbtn, .wslot, #joystick{ font-family: var(--hud-font); }
+
+  .tbtn{
+    position:fixed; pointer-events:auto; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:2px;
+    border-radius:16px; border:2px solid rgba(232,220,196,.42);
+    /* Solid-ish base, not pure alpha: the HUD has to hold up over a bright sky
+       as well as dark ground, and translucency alone fails against the sky. */
+    background:rgba(18,13,8,.60);
+    color:var(--bone);
+    font-size:9px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+    box-shadow:0 2px 10px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.10);
+    transition:transform .06s ease-out, background .12s, border-color .12s, box-shadow .12s;
+  }
+  .tbtn svg{ width:44%; height:44%; pointer-events:none; display:block; }
+  .tbtn span{ line-height:1; opacity:.72; pointer-events:none; }
+  /* Press feedback must be instant and physical — a colour change alone reads as
+     lag on a 60Hz panel. Shrinking the button confirms the touch landed. */
+  .tbtn:active{ transform:scale(.93); background:rgba(143,43,31,.62); border-color:var(--bone); }
+
+  /* Sizes are deliberately restrained. A denser phone gives fewer CSS pixels for
+     the same physical screen, so a fan tuned by eye on one handset swells into
+     the weapon slots on another. These figures keep the fan under ~165px tall,
+     which clears the top-anchored HUD on every device tested. */
+  #firebtn{
+    right:14px; bottom:max(14px,env(safe-area-inset-bottom));
+    width:80px; height:80px; border-radius:50%;
+    border-color:rgba(192,138,62,.85);
+    background:rgba(120,32,24,.62);
+    box-shadow:0 3px 14px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.16);
+    font-size:10px;
+  }
+  #firebtn svg{ width:38%; height:38%; }
+  #firebtn:active{ transform:scale(.9); background:rgba(186,54,40,.8); }
+
+  #zoombtn  { right:104px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 4px);   width:58px; height:58px; }
+  #jumpbtn  { right:20px;  bottom:calc(max(14px,env(safe-area-inset-bottom)) + 90px);  width:58px; height:58px; }
+  #nadebtn  { right:100px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 74px);  width:56px; height:56px;
+              border-color:rgba(143,43,31,.75); }
+  #stancebtn{ right:166px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 74px);  width:52px; height:52px; }
+  #stonebtn { right:172px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 6px);   width:54px; height:54px; }
+
+  /* Zoom is a mode, not a shot: it stays lit while engaged. */
+  #zoombtn.on{ background:rgba(192,138,62,.5); border-color:var(--bone); }
+
+  /* The stone needs 10 coins. Dimming it is the whole affordance — it must read
+     as "not yet" at a glance, then unmistakably as "now" once it is armed. */
+  #stonebtn{ opacity:.32; border-color:rgba(150,150,150,.5);
+             transition:opacity .25s, box-shadow .25s, border-color .25s, transform .06s; }
+  #stonebtn.ready{ opacity:1; border-color:#e0cb92;
+                   box-shadow:0 0 18px rgba(216,192,137,.75), inset 0 1px 0 rgba(255,255,255,.2); }
+
   #joystick{position:fixed;left:18px;bottom:max(18px,env(safe-area-inset-bottom));width:130px;height:130px;
-    border-radius:50%;border:2px solid rgba(232,220,196,.35);background:rgba(20,14,8,.35);pointer-events:auto;}
+    border-radius:50%;border:2px solid rgba(232,220,196,.3);background:rgba(18,13,8,.42);pointer-events:auto;
+    box-shadow:inset 0 2px 12px rgba(0,0,0,.4);}
   #joyknob{position:absolute;left:50%;top:50%;width:54px;height:54px;border-radius:50%;
-    background:rgba(192,138,62,.55);border:1px solid rgba(232,220,196,.5);transform:translate(-50%,-50%);}
+    background:rgba(192,138,62,.6);border:2px solid rgba(232,220,196,.6);transform:translate(-50%,-50%);
+    box-shadow:0 2px 8px rgba(0,0,0,.45);}
 
   .screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;
     background:radial-gradient(ellipse at 50% 35%,#3a2c1c 0%,#15100a 70%);color:var(--bone);text-align:center;
@@ -93,10 +154,20 @@
   @keyframes lowpulse{0%,100%{opacity:.12}50%{opacity:.4}}
   #wpnslots{position:fixed;right:118px;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 178px);
     display:flex;flex-direction:column;gap:6px;pointer-events:auto;}
-  .wslot{width:62px;height:40px;border:2px solid rgba(232,220,196,.4);background:rgba(20,14,8,.45);
-    color:var(--bone);font-family:inherit;font-size:9px;letter-spacing:.06em;display:flex;
-    align-items:center;justify-content:center;border-radius:8px;}
-  .wslot.on{border-color:var(--brass);background:rgba(192,138,62,.4);}
+  /* Weapon slots are a mode switch, not an action — pressed between fights, not
+     during them. So they sit away from the thumb cluster, and the digit does the
+     work: it is the same key as on a keyboard, and it reads at a glance. */
+  .wslot{width:92px;height:32px;border:2px solid rgba(232,220,196,.32);background:rgba(18,13,8,.55);
+    color:var(--bone);font-family:var(--hud-font);font-size:9px;font-weight:600;letter-spacing:.06em;
+    display:flex;align-items:center;gap:6px;padding:0 8px;border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.35);transition:border-color .12s,background .12s,transform .06s;}
+  .wslot b{display:grid;place-items:center;width:18px;height:18px;flex:none;border-radius:5px;
+    background:rgba(232,220,196,.16);font-size:10px;font-weight:700;}
+  .wslot span{opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .wslot.on{border-color:var(--brass);background:rgba(192,138,62,.38);}
+  .wslot.on b{background:var(--brass);color:#241a0e;}
+  .wslot.on span{opacity:1;}
+  .wslot:active{transform:scale(.95);}
   .setrow{display:flex;align-items:center;gap:12px;margin:6px 0;font-size:13px;letter-spacing:.08em;}
   .setrow input[type=range]{width:140px;pointer-events:auto;}
   .setrow .tog{pointer-events:auto;background:rgba(20,14,8,.5);border:1px solid var(--brass);
@@ -116,32 +187,24 @@
 
   /* ============================================================
      SHORT LANDSCAPE (phones held sideways).
-     The default HUD stacks controls up to 272px off the bottom edge, which
-     needs a tall viewport. A phone in landscape gives us barely 400px of CSS
-     height, so those bottom-anchored buttons climb into the top-anchored radar
-     and collide. Below, the right-hand controls are re-laid as a compact 3x2
-     thumb cluster and everything shrinks to fit.
+     A phone in landscape gives the page barely 400px of CSS height. The thumb
+     fan above already fits that, so the buttons are left alone here — this block
+     only pulls in the things anchored to the TOP edge (radar, weapon slots) and
+     the text readouts, which would otherwise collide with the fan.
      ============================================================ */
   @media (max-height: 560px) and (orientation: landscape){
-    /* right-hand thumb cluster: two rows, three columns, anchored bottom-right */
-    #firebtn  {width:72px;height:72px;right:14px;bottom:max(12px,env(safe-area-inset-bottom));font-size:12px;}
-    #firebtn .glyph{font-size:20px;}
-    #jumpbtn  {width:56px;height:56px;right:22px;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 80px);}
-    #zoombtn  {width:56px;height:56px;right:96px;bottom:max(12px,env(safe-area-inset-bottom));}
-    #nadebtn  {width:56px;height:56px;right:96px;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 68px);}
-    #stancebtn{width:56px;height:56px;right:162px;bottom:max(12px,env(safe-area-inset-bottom));}
-    #stonebtn {width:56px;height:56px;right:162px;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 68px);}
-    .tbtn{font-size:9px;letter-spacing:.06em;}
-
-    /* radar and weapon slots share the right edge above the cluster */
+    /* radar and weapon slots share the right edge, above the thumb fan */
     #radar   {width:72px;height:72px;top:calc(env(safe-area-inset-top) + 4px);right:12px;}
     #radarlbl{top:calc(env(safe-area-inset-top) + 78px);right:12px;width:72px;font-size:8px;}
     #wpnslots{right:12px;bottom:auto;top:calc(env(safe-area-inset-top) + 96px);gap:4px;}
-    .wslot{width:72px;height:26px;font-size:8px;}
+    /* Wide enough that МАЛИХЕРКА fits — truncating a weapon name to "МАЛИХЕР…"
+       defeats the point of labelling it at all. */
+    .wslot{width:104px;height:28px;font-size:8px;letter-spacing:.02em;}
+    .wslot b{width:16px;height:16px;font-size:9px;}
 
     /* left column: joystick at thumb height, readouts stacked above it */
-    #joystick{width:108px;height:108px;left:14px;bottom:max(12px,env(safe-area-inset-bottom));}
-    #joyknob {width:46px;height:46px;}
+    #joystick{width:112px;height:112px;left:14px;bottom:max(12px,env(safe-area-inset-bottom));}
+    #joyknob {width:48px;height:48px;}
     /* healthwrap is bar + caption (~30px tall), so the stack above it starts at
        +164, not +152 — otherwise the stance label lands on the health bar. */
     #healthwrap {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 128px);width:150px;}
@@ -202,11 +265,20 @@
 
 <div id="joystick"><div id="joyknob"></div></div>
 <div id="wpnslots">
-  <button class="wslot on" data-w="0">1 БЕРДАНА</button>
-  <button class="wslot" data-w="1">2 МАЛИХЕРКА</button>
-  <button class="wslot" data-w="2">3 ТОПЧЕ</button>
+  <button class="wslot on" data-w="0"><b>1</b><span>БЕРДАНА</span></button>
+  <button class="wslot" data-w="1"><b>2</b><span>МАЛИХЕРКА</span></button>
+  <button class="wslot" data-w="2"><b>3</b><span>ТОПЧЕ</span></button>
 </div>
-<button class="tbtn" id="stonebtn">КАМЕН<br>✦</button>
+
+<!-- Action buttons carry an icon first and the word second. Under fire a player
+     recognises a shape pre-attentively; a Cyrillic word has to be *read*, which
+     is far slower. The label stays as a learning aid, not as the primary cue. -->
+<button class="tbtn t-stone" id="stonebtn">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M4 15l3-7 5-3 6 3 2 7-5 4H8z" fill="currentColor" opacity=".85"/>
+    <path d="M7 8l5 4 6-1M12 12l-4 7" stroke="rgba(0,0,0,.45)" stroke-width="1.3" fill="none"/>
+  </svg><span>КАМЕН</span>
+</button>
 
 <div class="screen hidden" id="pausescreen">
   <div class="ornament">пауза</div>
@@ -216,11 +288,47 @@
   <div class="setrow" style="margin-top:16px;justify-content:center;">
     <span>Музика</span><button class="tog" id="setMusic2">ON</button></div>
 </div>
-<button class="tbtn" id="nadebtn">БОМБА</button>
-<button class="tbtn" id="stancebtn">СТАВ</button>
-<button class="tbtn" id="jumpbtn">СКОК</button>
-<button class="tbtn" id="zoombtn">НИШАН</button>
-<button class="tbtn" id="firebtn"><span class="glyph">✛</span>ОГАН</button>
+<button class="tbtn t-nade" id="nadebtn">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="11" cy="14" r="6" fill="currentColor"/>
+    <path d="M14 9l2-3 3 1" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    <path d="M19 7l1.5-2.5" stroke="#ffb43c" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    <path d="M8 12h6M11 11v6" stroke="rgba(0,0,0,.4)" stroke-width="1.2"/>
+  </svg><span>БОМБА</span>
+</button>
+
+<button class="tbtn t-stance" id="stancebtn">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="3" y="5"  width="18" height="2.6" rx="1.3" fill="currentColor" opacity=".45"/>
+    <rect x="3" y="11" width="18" height="2.6" rx="1.3" fill="currentColor" opacity=".75"/>
+    <rect x="3" y="17" width="18" height="2.6" rx="1.3" fill="currentColor"/>
+  </svg><span>СТАВ</span>
+</button>
+
+<button class="tbtn t-jump" id="jumpbtn">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 4l7 8h-4v7H9v-7H5z" fill="currentColor"/>
+  </svg><span>СКОК</span>
+</button>
+
+<button class="tbtn t-zoom" id="zoombtn">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="7.5" stroke="currentColor" stroke-width="1.8" fill="none"/>
+    <path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
+  </svg><span>НИШАН</span>
+</button>
+
+<!-- Primary action: biggest target, in the corner the thumb already rests on.
+     Fitts's law — the most-used control gets the shortest travel and the
+     largest area, so it can be hit without looking. -->
+<button class="tbtn t-fire" id="firebtn">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="6.5" stroke="currentColor" stroke-width="2" fill="none"/>
+    <path d="M12 0v6M12 18v6M0 12h6M18 12h6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="12" cy="12" r="2.4" fill="currentColor"/>
+  </svg><span>ОГАН</span>
+</button>
 
 <div class="screen" id="startscreen">
   <div class="ornament">12 август 1903 · Илинден</div>
