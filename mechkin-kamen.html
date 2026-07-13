@@ -28,18 +28,42 @@
   #topbar{position:absolute;top:max(10px,env(safe-area-inset-top));left:0;right:0;display:flex;
     justify-content:space-between;padding:0 14px;font-size:14px;letter-spacing:.06em;}
   .panel{background:rgba(20,14,8,.55);border:1px solid rgba(232,220,196,.25);padding:6px 12px;}
-  #healthwrap{position:absolute;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 150px);left:14px;width:38%;max-width:220px;}
-  #healthbar{height:10px;border:1px solid rgba(232,220,196,.4);background:rgba(20,14,8,.5);}
-  #healthfill{height:100%;width:100%;background:var(--blood);transition:width .2s;}
-  #healthtext{font-size:11px;margin-top:4px;letter-spacing:.08em;opacity:.85;}
-  #ammo{position:absolute;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 272px);left:14px;
-    font-size:13px;letter-spacing:.1em;text-transform:uppercase;opacity:.9;}
-  #stancelabel{position:absolute;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 206px);left:14px;
-    font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);}
-  #nadelabel{position:absolute;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 228px);left:14px;
-    font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--bone);opacity:.9;}
-  #coinlabel{position:absolute;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 250px);left:14px;
-    font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);}
+  /* ============================================================
+     STATUS PANEL (bottom-left, above the joystick)
+
+     One container, one left edge, one rhythm. Previously each readout was
+     absolutely positioned with its own bottom offset, so nothing shared an
+     alignment and the spacing drifted. A flex column makes alignment a
+     property of the layout instead of something to hand-tune per label.
+
+     Ranked by what a player under fire actually needs: health first (it is
+     the only value that ends the run), then the weapon, then the rest.
+     ============================================================ */
+  #statuspanel{
+    position:absolute; left:14px;
+    bottom:calc(max(14px,env(safe-area-inset-bottom)) + 148px);
+    width:210px; display:flex; flex-direction:column; gap:7px;
+    text-transform:uppercase;
+  }
+
+  #healthwrap{ width:100%; }
+  #healthbar{height:11px;border:1px solid rgba(232,220,196,.45);background:rgba(20,14,8,.62);
+    border-radius:2px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.5);}
+  #healthfill{height:100%;width:100%;background:var(--blood);transition:width .2s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.18);}
+  #healthtext{font-size:9px;margin-top:3px;letter-spacing:.16em;opacity:.75;}
+
+  /* The weapon and its load are what a player checks mid-fight, so this is the
+     one line that gets full weight and full opacity. */
+  #ammo{font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--bone);}
+
+  /* Everything below is glanceable, not readable — spaced as one row so the
+     three values share a baseline instead of stacking into a ragged column. */
+  #statrow{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:9px;
+    font-weight:600;letter-spacing:.1em;}
+  #nadelabel{color:var(--bone);opacity:.85;}
+  #coinlabel{color:var(--brass);}
+  #stancelabel{color:var(--brass);opacity:.85;}
   #stonebtn{right:18px;bottom:calc(max(18px,env(safe-area-inset-bottom)) + 256px);width:62px;height:62px;
     border-color:rgba(120,120,120,.6);opacity:0.35;transition:opacity .25s, box-shadow .25s;}
   #stonebtn.ready{opacity:1;border-color:#d8c089;box-shadow:0 0 16px rgba(216,192,137,.8);}
@@ -92,13 +116,24 @@
      lag on a 60Hz panel. Shrinking the button confirms the touch landed. */
   .tbtn:active{ transform:scale(.93); background:rgba(143,43,31,.62); border-color:var(--bone); }
 
-  /* Sizes are deliberately restrained. A denser phone gives fewer CSS pixels for
-     the same physical screen, so a fan tuned by eye on one handset swells into
-     the weapon slots on another. These figures keep the fan under ~165px tall,
-     which clears the top-anchored HUD on every device tested. */
+  /* ------------------------------------------------------------
+     LAYOUT: one big primary, then a strict grid.
+
+     An earlier pass fanned these along the thumb's arc — in theory the shortest
+     travel, in practice it just read as five buttons dropped at random. A grid
+     reads as deliberate and is far easier to learn, and the travel it costs is
+     a few millimetres. Alignment wins.
+
+       [СТАВ ] [БОМБА]        <- secondary row, shared baseline
+       [КАМЕН] [НИШАН]  (СКОК above)   <- primary row
+                        [ОГАН]         <- corner, biggest
+
+     Every button is 60px on a 72px pitch, so gaps are a uniform 12px — well over
+     the ~10px below which mis-taps start, and visibly regular.
+     ------------------------------------------------------------ */
   #firebtn{
     right:14px; bottom:max(14px,env(safe-area-inset-bottom));
-    width:80px; height:80px; border-radius:50%;
+    width:88px; height:88px; border-radius:50%;
     border-color:rgba(192,138,62,.85);
     background:rgba(120,32,24,.62);
     box-shadow:0 3px 14px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.16);
@@ -107,22 +142,42 @@
   #firebtn svg{ width:38%; height:38%; }
   #firebtn:active{ transform:scale(.9); background:rgba(186,54,40,.8); }
 
-  #zoombtn  { right:104px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 4px);   width:58px; height:58px; }
-  #jumpbtn  { right:20px;  bottom:calc(max(14px,env(safe-area-inset-bottom)) + 90px);  width:58px; height:58px; }
-  #nadebtn  { right:100px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 74px);  width:56px; height:56px;
+  .tbtn:not(#firebtn){ width:60px; height:60px; }
+
+  /* Jump sits directly above ОГАН, centred on it (fire is 88 wide, jump 60, so
+     14 + (88-60)/2 = 28 puts their centre lines together). */
+  #jumpbtn  { right:28px;  bottom:calc(max(14px,env(safe-area-inset-bottom)) + 100px); }
+
+  /* 2x2 grid to the left of ОГАН. Columns at 114/186, rows at 20/92. */
+  #zoombtn  { right:114px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 6px);  }
+  #stonebtn { right:186px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 6px);  }
+  #nadebtn  { right:114px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 78px);
               border-color:rgba(143,43,31,.75); }
-  #stancebtn{ right:166px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 74px);  width:52px; height:52px; }
-  #stonebtn { right:172px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 6px);   width:54px; height:54px; }
+  #stancebtn{ right:186px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 78px); }
 
   /* Zoom is a mode, not a shot: it stays lit while engaged. */
   #zoombtn.on{ background:rgba(192,138,62,.5); border-color:var(--bone); }
 
-  /* The stone needs 10 coins. Dimming it is the whole affordance — it must read
-     as "not yet" at a glance, then unmistakably as "now" once it is armed. */
-  #stonebtn{ opacity:.32; border-color:rgba(150,150,150,.5);
+  /* The stone needs 10 coins. Dimmed reads as "not yet", the glow as "now" — but
+     dimming alone hides that it is charging at all, so the count rides on the
+     button. Never fully transparent: an invisible control teaches nobody. */
+  #stonebtn{ opacity:.55; border-color:rgba(150,150,150,.55);
              transition:opacity .25s, box-shadow .25s, border-color .25s, transform .06s; }
   #stonebtn.ready{ opacity:1; border-color:#e0cb92;
-                   box-shadow:0 0 18px rgba(216,192,137,.75), inset 0 1px 0 rgba(255,255,255,.2); }
+                   box-shadow:0 0 18px rgba(216,192,137,.75), inset 0 1px 0 rgba(255,255,255,.2);
+                   animation:stonepulse 1.6s ease-in-out infinite; }
+  @keyframes stonepulse{
+    0%,100%{ box-shadow:0 0 12px rgba(216,192,137,.55), inset 0 1px 0 rgba(255,255,255,.2); }
+    50%    { box-shadow:0 0 26px rgba(216,192,137,1),  inset 0 1px 0 rgba(255,255,255,.3); }
+  }
+  #stonecount{
+    position:absolute; top:-6px; right:-6px; font-style:normal;
+    min-width:30px; padding:1px 4px; border-radius:8px;
+    background:rgba(18,13,8,.92); border:1px solid rgba(232,220,196,.5);
+    font-size:8px; font-weight:700; letter-spacing:0; color:var(--bone);
+    pointer-events:none;
+  }
+  #stonebtn.ready #stonecount{ background:var(--brass); color:#241a0e; border-color:#f0e0b0; }
 
   #joystick{position:fixed;left:18px;bottom:max(18px,env(safe-area-inset-bottom));width:130px;height:130px;
     border-radius:50%;border:2px solid rgba(232,220,196,.3);background:rgba(18,13,8,.42);pointer-events:auto;
@@ -202,17 +257,14 @@
     .wslot{width:104px;height:28px;font-size:8px;letter-spacing:.02em;}
     .wslot b{width:16px;height:16px;font-size:9px;}
 
-    /* left column: joystick at thumb height, readouts stacked above it */
+    /* left column: joystick at thumb height, status panel riding above it.
+       Only the panel's offset needs adjusting now — its internal alignment is
+       the flex column's job, not something to re-tune per breakpoint. */
     #joystick{width:112px;height:112px;left:14px;bottom:max(12px,env(safe-area-inset-bottom));}
     #joyknob {width:48px;height:48px;}
-    /* healthwrap is bar + caption (~30px tall), so the stack above it starts at
-       +164, not +152 — otherwise the stance label lands on the health bar. */
-    #healthwrap {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 128px);width:150px;}
-    #stancelabel{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 166px);}
-    #nadelabel  {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 184px);}
-    #coinlabel  {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 202px);}
-    #ammo       {bottom:calc(max(12px,env(safe-area-inset-bottom)) + 220px);font-size:11px;}
-    #healthtext, #stancelabel, #nadelabel, #coinlabel{font-size:9px;}
+    /* The joystick is 112px tall and sits 12px off the bottom, so its top edge is
+       124px up. The panel must start above that, not on it. */
+    #statuspanel{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 136px);width:190px;gap:6px;}
 
     #topbar{font-size:11px;padding:0 10px;}
     .panel{padding:4px 8px;}
@@ -252,14 +304,24 @@
     <div class="panel" id="score-label">0 пораз.</div>
   </div>
   <div id="dmgdir"></div>
-  <div id="healthwrap">
-    <div id="healthbar"><div id="healthfill"></div></div>
-    <div id="healthtext">ЖИВОТ</div>
+
+  <!-- One panel, one alignment. These were five separately-positioned labels,
+       each with its own offset and size, so nothing lined up with anything. -->
+  <div id="statuspanel">
+    <div id="ammo">Бердана · спремна</div>
+
+    <div id="healthwrap">
+      <div id="healthbar"><div id="healthfill"></div></div>
+      <div id="healthtext">ЖИВОТ</div>
+    </div>
+
+    <div id="statrow">
+      <span id="nadelabel">бомби · 3</span>
+      <span id="coinlabel">парички · 0/10</span>
+      <span id="stancelabel">стоиш</span>
+    </div>
   </div>
-  <div id="ammo">Бердана · спремна</div>
-  <div id="stancelabel">стоиш</div>
-  <div id="nadelabel">бомби · 3</div>
-  <div id="coinlabel">парички · 0/10</div>
+
   <div id="msg"></div>
 </div>
 
@@ -273,11 +335,16 @@
 <!-- Action buttons carry an icon first and the word second. Under fire a player
      recognises a shape pre-attentively; a Cyrillic word has to be *read*, which
      is far slower. The label stays as a learning aid, not as the primary cue. -->
+<!-- The stone is the game's signature attack, and the old HUD gave no clue it was
+     charging: a dim rock and a "парички · 3/10" buried in the corner. The count
+     now rides on the button itself, so the thing you are working toward is
+     attached to the thing you will press. -->
 <button class="tbtn t-stone" id="stonebtn">
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M4 15l3-7 5-3 6 3 2 7-5 4H8z" fill="currentColor" opacity=".85"/>
     <path d="M7 8l5 4 6-1M12 12l-4 7" stroke="rgba(0,0,0,.45)" stroke-width="1.3" fill="none"/>
   </svg><span>КАМЕН</span>
+  <i id="stonecount">0/10</i>
 </button>
 
 <div class="screen hidden" id="pausescreen">
@@ -1849,7 +1916,16 @@ const healthfill=$('healthfill'), waveLabel=$('wave-label'), scoreLabel=$('score
       ammoLabel=$('ammo'), msgEl=$('msg'), crosshair=$('crosshair'),
       hitmarker=$('hitmarker'), dmgflash=$('dmgflash'), stanceLabel=$('stancelabel'),
       nadeLabel=$('nadelabel');
-const coinLabel=$('coinlabel'), stonebtn=$('stonebtn');
+const coinLabel=$('coinlabel'), stonebtn=$('stonebtn'), stoneCount=$('stonecount');
+
+/* Single place that renders the stone's charge, so the button badge, the panel
+   text and the ready state can never drift out of step with each other. */
+function renderStone(){
+  const n = state.coins;
+  coinLabel.textContent = 'парички · ' + n + '/10';
+  stoneCount.textContent = n + '/10';
+  stonebtn.classList.toggle('ready', n >= 10);
+}
 const radarCanvas = $('radar'), radarCtx = radarCanvas.getContext('2d');
 const remainLabel = $('remain-label'), dmgDir = $('dmgdir');
 
@@ -2129,8 +2205,7 @@ function resetGame(){
   document.querySelectorAll('.wslot').forEach(b=> b.classList.toggle('on', b.dataset.w === '0'));
   dmgflash.classList.remove('lowhp');
   $('pausescreen').classList.add('hidden');
-  coinLabel.textContent = 'парички · 0/10';
-  stonebtn.classList.remove('ready');
+  renderStone();
   WEAPON_MODELS.forEach((m,k)=> m.visible = (k === 0));
   weaponGroup.position.set(0.16, -0.16, -0.42);
   weaponGroup.rotation.y = 0.04;
@@ -2656,9 +2731,8 @@ function allyShoot(al){
    ============================================================ */
 function addCoin(){
   state.coins = Math.min(10, state.coins + 1);
-  coinLabel.textContent = 'парички · ' + state.coins + '/10';
+  renderStone();
   if(state.coins >= 10){
-    stonebtn.classList.add('ready');
     showMsg('КАМЕНОТ Е СПРЕМЕН · притисни B / КАМЕН', 1600);
   } else {
     showMsg('паричка · ' + state.coins + '/10', 700);
@@ -2668,8 +2742,7 @@ const boulders = [];
 function hurlStone(){
   if(!state.running || state.paused || state.coins < 10) return;
   state.coins = 0;
-  coinLabel.textContent = 'парички · 0/10';
-  stonebtn.classList.remove('ready');
+  renderStone();
   showMsg('ЗА СЛОБОДА!', 1400);
   /* a huge stone arcs out from the player and devastates a wide area */
   const g = new THREE.Group();
