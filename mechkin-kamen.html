@@ -17,6 +17,26 @@
   canvas{display:block;image-rendering:pixelated;}
 
   #hud{position:fixed;inset:0;pointer-events:none;color:var(--bone);}
+
+  /* Music toggle. It lives IN the top bar, as a flex sibling of the pause button.
+     It used to be absolutely positioned on the right, where it sat on top of the
+     radar — the right-hand column already holds the radar, its label and three
+     weapon slots, and there was never room for it there.
+
+     Its state must be readable at a glance: a mute control you have to press in
+     order to find out what it is doing is worse than no control at all. */
+  #musicbtn{
+    pointer-events:auto; flex:none;
+    display:flex; align-items:center; gap:5px; padding:0 9px; height:28px;
+    border:1px solid rgba(232,220,196,.25); border-radius:4px;
+    background:rgba(20,14,8,.55); color:var(--bone);
+    font-family:var(--hud-font); font-size:9px; font-weight:600;
+    letter-spacing:.06em; text-transform:uppercase; white-space:nowrap;
+    transition:opacity .15s, border-color .15s, transform .06s;
+  }
+  #musicbtn:active{ transform:scale(.94); }
+  #musicicon{ font-size:12px; line-height:1; }
+  #musicbtn.off{ opacity:.42; border-color:rgba(150,150,150,.35); }
   /* The HUD sits over a bright sky as often as over dark ground, so bone-on-
      nothing washes out. A hard shadow keeps every readout legible on both. */
   #ammo,#stancelabel,#nadelabel,#coinlabel,#healthtext,#radarlbl{
@@ -298,12 +318,19 @@
   <div id="topbar">
     <div style="display:flex;gap:8px;">
       <button class="panel" id="pausebtn" style="pointer-events:auto;background:rgba(20,14,8,.55);color:var(--bone);border:1px solid rgba(232,220,196,.25);font-family:inherit;font-size:14px;">⏸</button>
+      <!-- Music lives in the TOP BAR, not the right-hand column. That column is
+           already full — radar, its label, three weapon slots — and the button was
+           landing straight on top of the radar. One tap cycles the track; the tap
+           after the last one switches it off. Essential on a phone, where there is
+           no keyboard and so no M shortcut. -->
+      <button id="musicbtn"><span id="musicicon">♪</span><span id="musicname">Оро</span></button>
       <div class="panel" id="wave-label">Бран 1</div>
       <div class="panel" id="remain-label" style="font-size:11px;opacity:.8;">—</div>
     </div>
     <div class="panel" id="score-label">0 пораз.</div>
   </div>
   <div id="dmgdir"></div>
+
 
   <!-- One panel, one alignment. These were five separately-positioned labels,
        each with its own offset and size, so nothing lined up with anything. -->
@@ -417,13 +444,13 @@
   </div>
   <div class="controls-hint">
     Џојстик — движење (до крај = трчање) · влечи по екран — нишани · ОГАН · БОМБА · КАМЕН (10 парички)<br>
-    Тастатура: WASD — движење · 1/2/3 — оружје · G — бомба · B — камен · Shift — трчање · Ctrl — лази · C — клекни · Space — скок · P — пауза
+    Тастатура: WASD — движење · 1/2/3 — оружје · <b>4 — камен</b> · <b>R — полни</b> · G — бомба · <b>Shift — трчање</b> · Ctrl — лази · C — клекни · Space — скок · <b>M — музика</b> · P — пауза
   </div>
 </div>
 
 <div class="screen hidden" id="endscreen">
   <div class="ornament">Мечкин Камен · 1903</div>
-  <h1 id="endtitle">ПАДНА <span class="ck">КАМЕНОТ</span></h1>
+  <h1 id="endtitle">ПАДНА <span class="ck">МЕЧКИН КАМЕН</span></h1>
   <div class="sub" id="endsub">Тука, на 12 август 1903, падна Питу Гули со четата —
   но Мечкин Камен остана вечен спомен на слободата.</div>
   <div id="finalstats"></div>
@@ -455,7 +482,9 @@ const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
    the sun sits ~360 out, so anything less clips the sky away and leaves the
    black clear-colour showing through. Fog, not the far plane, is what limits
    how much terrain is actually visible. */
-const CAMERA_FAR = 600;
+/* Has to clear the whole backdrop (1500) AND the sky dome beyond it, or the
+   distance is simply clipped away. */
+const CAMERA_FAR = 2600;
 
 const Q = IS_MOBILE ? {
   antialias:    false,   // MSAA on a mobile GPU costs more than it returns
@@ -465,11 +494,20 @@ const Q = IS_MOBILE ? {
   shadowType:   THREE.PCFShadowMap,   // PCFSoft samples too many taps here
   shadowExtent: 70,      // tighter frustum = more texel density from a smaller map
   shadowFar:    200,
-  /* Fog has to clear the backdrop, or the valley is swallowed before it can be
-     seen. Pushed out past BACKDROP_R — the haze then stops being a curtain and
-     becomes atmospheric perspective: the far ridges wash toward the sky, which
-     is exactly how the eye reads distance. */
-  fogNear:      70, fogFar: 460,
+  /* Fog was still eating the valley: at 70..460 the plain was ~80% washed out by
+     the time it was visible, so it read as green mist rather than as farmland.
+     Pushed well back. The haze should sit ON the distance, not replace it —
+     enough to say "far away", not so much that there is nothing left to see. */
+  /* THE FOG WAS EATING THE VALLEY.
+     At 160..1900, the plain was ~40% washed out by 800 units and ~70% by 1400 —
+     and a straw field blended 70% into a pale blue-white fog is a featureless
+     grey slab, which is exactly what was on screen. The farmland was rendering
+     perfectly the whole time and drowning in haze.
+
+     Haze should SIT ON the distance, not replace it. Now the fields keep their
+     colour across the plain, and the mist only really closes in at the far peaks,
+     which is what gives them their distance. */
+  fogNear:      420, fogFar: 2600,
   bloomScale:   0.35,    // bloom render targets, as a fraction of screen size
   bloomPasses:  1,
   ssaoScale:    0.5,     // AO is blurred anyway, so half-res costs nothing visible
@@ -482,7 +520,7 @@ const Q = IS_MOBILE ? {
   shadowType:   THREE.PCFSoftShadowMap,
   shadowExtent: 120,
   shadowFar:    260,
-  fogNear:      90, fogFar: 560,
+  fogNear:      460, fogFar: 2800,
   bloomScale:   0.5,
   bloomPasses:  2,
   ssaoScale:    0.6,
@@ -519,7 +557,10 @@ window.addEventListener('resize', ()=>{
 
 /* sky dome + square Minecraft sun */
 (function sky(){
-  const geo = new THREE.SphereGeometry(480, 16, 10);
+  /* The dome must sit OUTSIDE the backdrop (1500), or the far ranges would poke
+     through the sky. It used to be 480 — which was fine when the world ended at
+     440, and is not fine now. */
+  const geo = new THREE.SphereGeometry(2100, 24, 14);
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite:false, fog:false,
     uniforms:{ top:{value:new THREE.Color(SKY_TOP)}, bottom:{value:new THREE.Color(SKY_HOR)} },
@@ -536,9 +577,12 @@ window.addEventListener('resize', ()=>{
      as though it were somewhere else, the scene reads as broken even to someone
      who could not say why. Light is at (-95, 40, -62); this is that vector,
      normalised and pushed out to the old distance. */
-  const sunSq = new THREE.Mesh(new THREE.PlaneGeometry(34,34),
+  /* Pushed out past the far ranges (same direction, five times the distance, and
+     scaled to match) — otherwise the sun would be drawn IN FRONT of a mountain a
+     kilometre away, which reads as broken instantly. */
+  const sunSq = new THREE.Mesh(new THREE.PlaneGeometry(170,170),
     new THREE.MeshBasicMaterial({color:0xfff2d2, fog:false}));
-  sunSq.position.set(-284, 119, -185); sunSq.lookAt(0,0,0); scene.add(sunSq);
+  sunSq.position.set(-1423, 596, -927); sunSq.lookAt(0,0,0); scene.add(sunSq);
   /* soft radial glow (the shader "bloom" around the sun) */
   const gc = document.createElement('canvas'); gc.width = gc.height = 256;
   const gx = gc.getContext('2d');
@@ -550,7 +594,7 @@ window.addEventListener('resize', ()=>{
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
     map:new THREE.CanvasTexture(gc), fog:false, depthWrite:false,
     blending:THREE.AdditiveBlending, transparent:true }));
-  glow.scale.set(360,360,1);
+  glow.scale.set(1800,1800,1);
   glow.position.copy(sunSq.position);
   scene.add(glow);
 })();
@@ -925,6 +969,20 @@ const texStone = pixTex((i,j)=>{
   const v = (n-0.5)*8;
   return [base+v, base-2+v, base-7+v];
 });
+/* Cobbles: rounded setts of varying tone, with darker mortar between them.
+   The tones are drawn per-sett rather than per-pixel, or it reads as gravel. */
+const cobbleBlobs = makeBlobs(71, 14, 1.6, 2.8);
+const texCobble = pixTex((i,j)=>{
+  const b = blobAt(cobbleBlobs, i, j), n = px(i,j,72);
+  /* Mortar at 64 was near-black, and against a 154 sett that is a contrast of
+     90 levels — the street read as a chequerboard rather than as paving. Real
+     mortar is only a little darker than the stone it holds. */
+  if(b < 0) return [112, 107, 99];
+  const base = b < 0.34 ? 132 : b < 0.68 ? 144 : 158;      // three sizes of sett
+  const v = (n - 0.5) * 10;
+  return [base + v, base - 3 + v, base - 9 + v];           // faintly warm grey
+});
+
 const dirtBlobs = makeBlobs(22, 12, 1.2, 2.6);
 const texDirt = pixTex((i,j)=>{
   const b = blobAt(dirtBlobs, i, j), n = px(i,j,3);
@@ -1185,12 +1243,19 @@ function voxTop(x, z){
   if(inst.instanceColor) inst.instanceColor.needsUpdate = true;
   inst.receiveShadow = true;
   scene.add(inst);
-  /* matte plane far below the voxel rim for the horizon */
-  const far = new THREE.Mesh(new THREE.PlaneGeometry(900, 900),
-    new THREE.MeshLambertMaterial({color:0x6fa348}));
-  far.rotation.x = -Math.PI/2;
-  far.position.y = -10.5;
-  scene.add(far);
+  /* THE FAKE HORIZON IS GONE.
+     There used to be a 900x900 flat green plane here at y = -10.5 — a matte lid
+     to stop you seeing the void past the voxel rim. It did that job, and it also
+     sealed the sky off from everything below it.
+
+     Which meant it covered the entire Pelagonia backdrop: the escarpment, the
+     fields, the valley floor at -150 — all of it, hidden under a green tarpaulin
+     one and a half units below the player's eye. The backdrop was rendering
+     perfectly the whole time and simply could not be seen.
+
+     buildBackdrop() now provides the real horizon, so the lid is not needed. If
+     you ever see a void past the rim again, the backdrop failed to build — do not
+     put a plane back over it. */
 })();
 
 /* ============================================================
@@ -1283,83 +1348,275 @@ function rockBlock(x, y, z, s){
        backdrop drew even when it was all behind you. It is now split into
        sectors, and the ones at your back get culled.
 */
-const BACKDROP_STEP = 14;
-const BACKDROP_R    = 440;    // the camera's far plane is 600, so this fits
+/* The plain has to run to the HAZE, not stop at a visible edge. But extending the
+   14-unit grid out to 1500 would mean ~36,000 columns, which is absurd for
+   scenery. So it is built at two resolutions: fine near the rim, where the eye
+   can resolve individual fields, and very coarse far out, where a 46-unit block
+   is smaller than a pixel anyway. */
+const BACKDROP_STEP = 14;     // near ring: real fields
+const BACKDROP_MID  = 460;    // where the near ring hands over
+const BACKDROP_FAR_STEP = 46; // far ring: cheap, and nobody can resolve it
+const BACKDROP_R    = 1500;   // out to the fog
 const BACKDROP_SECT = 8;      // angular sectors, so the ones behind you can cull
-const PLAIN_Y       = -54;    // floor of the plain
+
+/* Distant ranges, low on the far horizon. NOT the peaks I removed earlier —
+   those ringed the player ABOVE his eyeline, which was wrong, because Kruševo is
+   the high ground. These sit a kilometre away across the plain and rise barely a
+   few degrees above the skyline, which is what the real view actually has. */
+const MTN_START = 1140;
+
+/* SCALE. Kruševo stands around 1350m; the Pelagonian plain is around 600m. That
+   is a 750-METRE drop, and the player is 1.7 units tall — so the valley floor
+   belongs a very long way down.
+
+   The first attempt put it 45 units below the rim, falling away over 120 units:
+   a 21-degree slope. That is a hillside you could stroll down, not a mountain
+   standing over a plain, and it read exactly as it was — the ground stepped down
+   a little and then ran flat to the horizon. There was no valley in it. */
+const PLAIN_Y       = -150;   // far below the rock, as it should be
+
+/* HOW FAR THE GROUND TAKES TO GET DOWN THERE.
+   First attempt: 120 units — a 21-degree ramp that read as no valley at all.
+   Second: 55 — which fixed that and introduced the opposite fault, a sheer wall
+   with the plain starting abruptly at its foot.
+
+   Neither is Kruševo. It stands over Pelagonia by 750m across KILOMETRES of
+   mountainside; the fall is long, not sudden. 480 gives a slope that keeps
+   descending for most of the visible distance and flattens into the plain
+   without a line where one becomes the other. */
+const SCARP_LEN     = 480;
 
 function farHeight(x, z){
   const d = Math.hypot(x, z) || 1;
   const rimH = -VOX_R * 0.09;                   // height where the playable ground ends
 
-  /* The escarpment: ground falls away from the rim down onto the plain.
-     Smoothstepped, so the rim meets the drop without a visible seam. */
-  const t = Math.min(1, Math.max(0, (d - VOX_R) / 120));
-  const s = t * t * (3 - 2 * t);
+  /* The mountainside. Steepest just under the rim and easing off as it goes —
+     which is how a real slope behaves, and it removes the hard line where the
+     "cliff" used to stop and the plain used to start. */
+  const t = Math.min(1, Math.max(0, (d - VOX_R) / SCARP_LEN));
+  const s = 1 - Math.pow(1 - t, 2.2);
   let h = rimH + (PLAIN_Y - rimH) * s;
 
+  /* Broken ground all down the slope — spurs and gullies, not a smooth ramp. */
+  h += fbm(x * 0.022, z * 0.022) * 26 * s * (1 - s) * 4;
+
   /* Relief on the plain floor — a plain is flat, not a table. */
-  h += fbm(x * 0.010, z * 0.010) * 6 * s;
+  h += fbm(x * 0.010, z * 0.010) * 7 * s;
 
-  /* Mountains ring the horizon, EXCEPT toward -Z, where Pelagonia runs away flat
-     to the skyline. That gap is the entire point of the view. */
-  const toValley = -z / d;                      // +1 = straight out over the valley
-  const mask = Math.max(0, 1 - Math.max(0, toValley) * 1.45);
-  const rise = Math.max(0, (d - 230) / 180);
-  h += mask * rise * rise * 165 * (0.55 + 0.45 * fbm(x * 0.0045, z * 0.0045));
-
+  /* TINY peaks, right where the plain meets the mist.
+     They start over a kilometre out and rise only a little, so from the rock they
+     subtend barely 1-3 degrees — a jagged edge on the skyline, not a wall. That
+     smallness is the whole point: a distant thing that looks small is what TELLS
+     the eye the plain is vast. Make them big and you destroy the depth you were
+     trying to create. */
+  const far = Math.max(0, (d - MTN_START) / 360);
+  if(far > 0){
+    const ridge  = 0.45 + 0.55 * fbm(x * 0.0020, z * 0.0020);
+    const detail = 0.65 + 0.35 * fbm(x * 0.0090, z * 0.0090);
+    /* 70, not 200. At 200 they climbed to within a few units of the eye and came
+       out as a grey PLATEAU across the horizon — the opposite of depth. A distant
+       thing has to look SMALL; that smallness is the only reason the eye believes
+       the plain is vast. These now break the skyline by a couple of degrees. */
+    h += far * far * 70 * ridge * detail;
+  }
   return h;
 }
 
+/* Near-white, so a per-instance colour can tint it into anything. The plain is
+   painted by INSTANCE COLOUR, not by texture — see FIELDS below. */
+const texFarGround = pixTex((i,j)=>{
+  const v = 208 + px(i,j,91)*34;
+  return [v|0, v|0, (v*0.96)|0];
+});
+
+/* FIELDS.
+   Pelagonia seen from above is not a green sheet — it is farmland: a patchwork of
+   wheat gold, ploughed brown, crop green and pale stubble in field-sized parcels.
+   That patchwork IS the valley; without it the plain is just a coloured fog bank,
+   which is exactly what the first version looked like.
+
+   Cheap to do: one instanced mesh, one colour per instance, fields assigned by
+   quantising position onto a coarse grid so parcels come out field-shaped rather
+   than as noise blobs. */
+/* Pelagonia in August is a YELLOW plain — wheat, straw and stubble to the
+   horizon — with greenery and worked fields scattered through it. So the palette
+   is weighted, not uniform: entries repeat, and the straws repeat most, which
+   makes them come up most often. Green and ploughed brown appear as relief
+   against the gold rather than competing with it.
+
+   The colours are also deliberately far apart, because haze COMPRESSES contrast:
+   a palette that looks nicely varied up close collapses into one flat smear at a
+   kilometre, which is exactly what my first attempt did. */
+const FIELD_COLOURS = [
+  [0.90, 0.82, 0.44],   // straw
+  [0.86, 0.76, 0.36],   // ripe wheat
+  [0.92, 0.86, 0.55],   // pale stubble
+  [0.84, 0.74, 0.38],   // dry gold
+  [0.88, 0.80, 0.46],   // straw
+  [0.80, 0.71, 0.34],   // wheat, deeper
+  [0.42, 0.54, 0.24],   // green crop        <- scattered relief
+  [0.28, 0.40, 0.21],   // greenery / trees  <- scattered relief
+  [0.56, 0.38, 0.24],   // ploughed earth    <- scattered relief
+  [0.87, 0.79, 0.42],   // straw
+  [0.82, 0.75, 0.41],   // fallow
+  [0.50, 0.57, 0.29],   // pasture
+];
+const FIELD_SIZE = 95;   // was 30 — that gave a chessboard of little squares
+
+const SLOPE_GREEN = [0.26, 0.38, 0.20];   // wooded mountainside
+
+function fieldColourAt(x, z, top){
+  /* DOMAIN WARP, not jitter.
+     A small nudge on a 30-unit grid still reads as a grid — small squares, like a
+     chessboard. Real parcels are large and irregular, and they follow the lie of
+     the land rather than a lattice.
+
+     So the grid is much coarser, and the coordinates are dragged HARD through
+     noise before being quantised — two octaves of it, one broad and one fine. The
+     lattice survives only as a topology; the shapes that come out of it are
+     organic, and the boundaries wander. */
+  const wx = x + fbm(x * 0.0016, z * 0.0016) * 130 + fbm(x * 0.0075, z * 0.0075) * 34;
+  const wz = z + fbm(x * 0.0016 + 90, z * 0.0016 - 90) * 130
+               + fbm(x * 0.0075 - 50, z * 0.0075 + 50) * 34;
+  const fx = Math.floor(wx / FIELD_SIZE);
+  const fz = Math.floor(wz / FIELD_SIZE);
+
+  let h = Math.imul(fx, 0x27d4eb2d) ^ Math.imul(fz, 0x165667b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = ((h ^ (h >>> 13)) >>> 0);
+
+  const c = FIELD_COLOURS[h % FIELD_COLOURS.length];
+  /* A little variation WITHIN a field, so a parcel is not a flat plate. */
+  const v = 0.92 + ((h >>> 8) % 100) / 100 * 0.16;
+
+  /* Colour follows ELEVATION. Nobody farms a mountainside: high ground is wooded
+     and green, and it becomes straw as it flattens out. Grading the parcel colour
+     by height means the slope turns into farmland gradually, instead of there
+     being a line across the landscape where green stops and gold begins. */
+  const up = Math.min(1, Math.max(0, (top - PLAIN_Y) / 110));
+  const g = up * 0.85;
+  return [
+    c[0]*v * (1 - g) + SLOPE_GREEN[0] * g,
+    c[1]*v * (1 - g) + SLOPE_GREEN[1] * g,
+    c[2]*v * (1 - g) + SLOPE_GREEN[2] * g,
+  ];
+}
+
 function buildBackdrop(){
-  /* buckets[sector][0] = plain columns, [1] = mountain columns */
+  /* buckets[sector][0] = plain (fields), [1] = escarpment rock */
   const buckets = Array.from({length: BACKDROP_SECT}, ()=> [[], []]);
   const m = new THREE.Matrix4();
   const half = BACKDROP_STEP / 2;
   const FLOOR = PLAIN_Y - 22;                   // nothing is ever seen below this
   let total = 0;
 
-  for(let x = -BACKDROP_R; x <= BACKDROP_R; x += BACKDROP_STEP){
-    for(let z = -BACKDROP_R; z <= BACKDROP_R; z += BACKDROP_STEP){
-      const cx = x + half, cz = z + half;
-      const d = Math.hypot(cx, cz);
-      if(d <= VOX_R + 2 || d > BACKDROP_R) continue;   // leave the playable disc alone
+  /* Two rings: fine near the rim, coarse far out. */
+  const rings = [
+    { step: BACKDROP_STEP,     from: VOX_R + 2,   to: BACKDROP_MID },
+    { step: BACKDROP_FAR_STEP, from: BACKDROP_MID, to: BACKDROP_R  },
+  ];
 
-      const top = Math.round(farHeight(cx, cz) / 2) * 2;   // stays stepped, like the world
+  rings.forEach(ring=>{
+    const h2 = ring.step / 2;
+    for(let x = -ring.to; x <= ring.to; x += ring.step){
+      for(let z = -ring.to; z <= ring.to; z += ring.step){
+        const cx = x + h2, cz = z + h2;
+        const d = Math.hypot(cx, cz);
+        if(d <= ring.from || d > ring.to) continue;
 
-      /* Only as deep as it needs to be. A uniform 90-tall box meant every pixel
-         of the plain had a dozen boxes behind it — and overdraw, not triangles,
-         is what a mobile GPU chokes on. */
-      const H = Math.max(6, top - FLOOR);
-      m.compose(
-        new THREE.Vector3(cx, top - H/2, cz),
-        new THREE.Quaternion(),
-        new THREE.Vector3(BACKDROP_STEP, H, BACKDROP_STEP),
-      );
+        const top = Math.round(farHeight(cx, cz) / 2) * 2;   // stays stepped, like the world
 
-      const sect = Math.floor(
-        ((Math.atan2(cz, cx) + Math.PI) / (Math.PI*2)) * BACKDROP_SECT
-      ) % BACKDROP_SECT;
-      buckets[sect][top > 16 ? 1 : 0].push(m.clone());
-      total++;
+        /* Only as deep as it needs to be. A uniform tall box meant every pixel of
+           the plain had a dozen boxes behind it — and overdraw, not triangles, is
+           what a mobile GPU chokes on. */
+        const H = Math.max(6, top - FLOOR);
+        m.compose(
+          new THREE.Vector3(cx, top - H/2, cz),
+          new THREE.Quaternion(),
+          new THREE.Vector3(ring.step, H, ring.step),
+        );
+
+        const sect = Math.floor(
+          ((Math.atan2(cz, cx) + Math.PI) / (Math.PI*2)) * BACKDROP_SECT
+        ) % BACKDROP_SECT;
+        /* Grey rock ONLY for the far peaks. Nothing else.
+
+           Every earlier rule here painted part of the mountainside as bare stone,
+           and it came out as a flat grey band lying across the middle of the view
+           — measurably flat: a standard deviation of 5, against 35 for the fields
+           either side of it. The slope is not a quarry. It is living ground, and
+           fieldColourAt already grades it from wooded green at the top to straw on
+           the floor. Let it. */
+        const rocky = d > MTN_START && top > PLAIN_Y + 55;
+        buckets[sect][rocky ? 1 : 0].push({ m: m.clone(), c: fieldColourAt(cx, cz, top) });
+        total++;
+      }
     }
-  }
+  });
 
-  const texOf = [texGrassTop, texStone];
+  /* r128 applies instanceColor in the FRAGMENT shader only when USE_COLOR is
+     defined — and USE_COLOR comes from material.vertexColors, not from having an
+     instanceColor at all. So a per-instance tint silently does nothing unless
+     vertexColors is on. But switching that on without a colour attribute leaves
+     `color` at its WebGL default of black, and the whole valley renders black.
+     An all-white colour attribute satisfies both: white * instanceColor = the
+     field colour. */
+  const fieldGeo = new THREE.BoxGeometry(1,1,1);
+  fieldGeo.setAttribute('color', new THREE.Float32BufferAttribute(
+    new Float32Array(fieldGeo.attributes.position.count * 3).fill(1), 3));
+
+  const texOf = [texFarGround, texStone];
+  const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
+
   buckets.forEach(sector=>{
-    sector.forEach((mats, kind)=>{
-      if(!mats.length) return;
-      const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),
-        new THREE.MeshLambertMaterial({map: texOf[kind]}), mats.length);
-      mats.forEach((mm, i)=> mesh.setMatrixAt(i, mm));
+    sector.forEach((items, kind)=>{
+      if(!items.length) return;
+      const isField = kind === 0;
+
+      /* FRUSTUM CULLING AND INSTANCED MESHES — the bug that hid the whole valley.
+
+         r128's Frustum.intersectsObject does this:
+
+             _sphere.copy( geometry.boundingSphere ).applyMatrix4( object.matrixWorld );
+
+         It uses the GEOMETRY's bounding sphere and ignores the instance matrices
+         entirely. Our geometry is a unit box and the mesh sits at the origin, so
+         every sector claimed to be a sphere of radius ~0.9 at world zero. Stand
+         on the rim facing outward and the origin is BEHIND you — so all eight
+         sectors were culled as off-screen, and the backdrop never drew at all.
+
+         So each sector gets its OWN geometry carrying a bounding sphere that
+         actually covers its instances. Culling then works, and works correctly. */
+      const geo = (isField ? fieldGeo : new THREE.BoxGeometry(1,1,1)).clone();
+      const box = new THREE.Box3();
+      items.forEach(it=>{
+        it.m.decompose(_p, _q, _s);
+        box.expandByPoint(new THREE.Vector3(
+          _p.x - _s.x/2, _p.y - _s.y/2, _p.z - _s.z/2));
+        box.expandByPoint(new THREE.Vector3(
+          _p.x + _s.x/2, _p.y + _s.y/2, _p.z + _s.z/2));
+      });
+      geo.boundingSphere = new THREE.Sphere();
+      box.getBoundingSphere(geo.boundingSphere);
+      geo.boundingBox = box;
+
+      const mesh = new THREE.InstancedMesh(geo,
+        new THREE.MeshLambertMaterial({map: texOf[kind], vertexColors: isField}),
+        items.length);
+      items.forEach((it, i)=> mesh.setMatrixAt(i, it.m));
+      if(isField){
+        mesh.instanceColor = new THREE.InstancedBufferAttribute(
+          new Float32Array(items.length * 3), 3);
+        items.forEach((it, i)=>
+          mesh.instanceColor.setXYZ(i, it.c[0], it.c[1], it.c[2]));
+        mesh.instanceColor.needsUpdate = true;
+      }
       mesh.instanceMatrix.needsUpdate = true;
       /* Scenery: no shadows. Casting from thousands of distant boxes would spend
          the whole shadow map on ground the player can never stand on. */
       mesh.castShadow = false;
       mesh.receiveShadow = false;
-      /* Left CULLABLE, and split by sector so the half of the backdrop behind the
-         player is actually dropped instead of drawn. */
-      mesh.frustumCulled = true;
+      mesh.frustumCulled = true;      // now safe: the bounds above are real
       scene.add(mesh);
     });
   });
@@ -1648,15 +1905,52 @@ const clouds = [];
    Walls block movement AND bullets — cover for both sides.
    ============================================================ */
 (function town(){
-  const stoneM = [], wallM = [], roofM = [], winM = [], plankM = [];
+  const stoneM = [], wallM = [], roofM = [], winM = [], plankM = [], cobbleM = [];
   function put(arr, x, y, z, sy){
     const m = new THREE.Matrix4();
     m.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(),
               new THREE.Vector3(1, sy||1, 1));
     arr.push(m);
   }
-  function buildHouse(bx, bz, w, d){
-    const g0 = voxTop(bx + Math.floor(w/2), bz + Math.floor(d/2));
+  /* True only if EVERY cell of the footprint sits on real ground. A building
+     whose corner hangs past the terrain disc has nothing under it at all — the
+     plinth reaches down into empty space and the valley shows through. */
+  function fitsOnMap(bx, bz, w, d, maxR){
+    if(!maxR) return true;
+    for(let ix=0; ix<=w; ix++) for(let iz=0; iz<=d; iz++){
+      if(Math.hypot(bx+ix, bz+iz) > maxR) return false;
+    }
+    return true;
+  }
+
+  function buildHouse(bx, bz, w, d, maxR){
+    if(!fitsOnMap(bx, bz, w, d, maxR)){
+      console.warn('skipped house off the map at', bx, bz);
+      return;
+    }
+    /* The ground used to be sampled ONCE, at the centre of the footprint, and the
+       whole house was then built at that one height. Kruševo is a HILL TOWN —
+       there is no flat ground anywhere on that slope — so the downhill corner of
+       every house hung in the air.
+
+       The floor now sits at the LOWEST ground under the footprint, which
+       guarantees no cell can be left hanging, and a stone plinth is filled in
+       beneath it. That is how these houses are really built on that hillside:
+       you level the site with masonry and put the house on top. */
+    let g0 = Infinity;
+    for(let ix=0; ix<w; ix++) for(let iz=0; iz<d; iz++){
+      g0 = Math.min(g0, voxTop(bx+ix+0.5, bz+iz+0.5));
+    }
+
+    /* Plinth: from each cell's OWN ground down to the floor line, so the house
+       meets the hill instead of hovering over it. */
+    for(let ix=0; ix<w; ix++) for(let iz=0; iz<d; iz++){
+      const gc = voxTop(bx+ix+0.5, bz+iz+0.5);
+      for(let y = g0; y < gc; y += 0.5){
+        put(stoneM, bx+ix+0.5, y + 0.25, bz+iz+0.5, 0.5);
+      }
+    }
+
     /* solid footprint: nobody walks through a house */
     for(let ix=0; ix<w; ix++) for(let iz=0; iz<d; iz++) blockCell(bx+ix+0.5, bz+iz+0.5);
     /* ground floor: stone perimeter, 2 blocks tall, with a dark door */
@@ -1694,9 +1988,25 @@ const clouds = [];
     }
   }
   /* the church of Sv. Nikola: white nave + striped bell tower with a cross */
-  function buildChurch(bx, bz){
-    const g0 = voxTop(bx+3, bz+3);
+  function buildChurch(bx, bz, maxR){
     const w = 6, d = 8;
+    if(!fitsOnMap(bx, bz, w, d, maxR)){
+      console.warn('skipped church off the map at', bx, bz);
+      return;
+    }
+    /* Same fix as the houses, and it matters more here: a 6x8 footprint spans
+       more slope than a cottage does, so a single centre sample left a bigger
+       corner hanging. Floor on the lowest ground, masonry plinth beneath. */
+    let g0 = Infinity;
+    for(let ix=0; ix<w; ix++) for(let iz=0; iz<d; iz++){
+      g0 = Math.min(g0, voxTop(bx+ix+0.5, bz+iz+0.5));
+    }
+    for(let ix=0; ix<w; ix++) for(let iz=0; iz<d; iz++){
+      const gc = voxTop(bx+ix+0.5, bz+iz+0.5);
+      for(let y = g0; y < gc; y += 0.5){
+        put(stoneM, bx+ix+0.5, y + 0.25, bz+iz+0.5, 0.5);
+      }
+    }
     for(let ix=0; ix<w; ix++) for(let iz=0; iz<d; iz++) blockCell(bx+ix+0.5, bz+iz+0.5);
     for(let ix=0; ix<w; ix++) for(let iz=0; iz<d; iz++){
       const edge = ix===0 || iz===0 || ix===w-1 || iz===d-1;
@@ -1730,13 +2040,72 @@ const clouds = [];
   }
 
   /* lay out the mahala: houses on the slope behind the player, staggered */
+  /* KRUŠEVO. Ten houses in a strip was a hamlet. This is the town they are dying
+     for, and it should look worth it — it should be the thing you see when you
+     turn around. Now ~30 houses spread across the slope behind the rock, on
+     terraces, with cobbled streets running between them. */
+  /* KRUŠEVO — and every plot must fit INSIDE the map.
+
+     The terrain disc ends at VOX_R (100); there are no ground columns past it.
+     My first pass at enlarging the town pushed plots out to radius 115, where
+     there is simply nothing to build on — so those houses stood over the void on
+     their plinths alone, with the valley visible straight through underneath.
+
+     TOWN_R keeps the whole footprint, corners included, on solid ground, and
+     buildHouse() now refuses anything that does not fit rather than quietly
+     building it in mid-air. */
+  const TOWN_R = VOX_R - 10;
+
   const plots = [
-    [-18, 62, 5, 5], [-6, 66, 6, 5], [8, 63, 5, 6], [20, 68, 6, 5],
-    [-26, 74, 5, 6], [-12, 78, 6, 6], [2, 76, 5, 5], [16, 80, 5, 5],
-    [-4, 88, 6, 5], [10, 90, 5, 5]
+    // front row, closest to the line
+    [-58, 40, 5, 5], [-42, 42, 6, 5], [-26, 40, 5, 6], [-10, 43, 6, 5],
+    [ 8, 41, 5, 5], [ 24, 43, 6, 5], [ 40, 40, 5, 6], [ 54, 42, 5, 5],
+    // second row
+    [-54, 53, 6, 5], [-38, 55, 5, 6], [-22, 53, 6, 5], [ -6, 56, 5, 5],
+    [ 12, 54, 6, 5], [ 28, 56, 5, 6], [ 44, 53, 6, 5],
+    // third row
+    [-46, 66, 5, 6], [-30, 68, 6, 5], [-14, 66, 5, 5], [ 4, 68, 6, 6],
+    [ 20, 66, 5, 5], [ 36, 67, 5, 6],
+    // upper terrace
+    [-34, 78, 6, 5], [-18, 80, 5, 6], [ 14, 79, 6, 5], [ 30, 77, 5, 5],
+    // outliers, so the edge of the town frays instead of ending in a line
+    [-64, 28, 5, 5], [ 62, 30, 5, 6], [-50, 30, 6, 5], [ 48, 66, 5, 5],
   ];
-  plots.forEach(p=> buildHouse(p[0], p[1], p[2], p[3]));
-  buildChurch(-2, 70);
+  plots.forEach(p=> buildHouse(p[0], p[1], p[2], p[3], TOWN_R));
+  buildChurch(-3, 78, TOWN_R);
+
+  /* ---- cobbled streets ----
+     Laid at ground level, one block deep, so they read as a surface rather than a
+     kerb. They follow the terraces between the rows of houses, with a couple of
+     lanes climbing between them — which is how a hill town actually works. */
+  function street(x0, z0, x1, z1, w){
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    const steps = Math.ceil(len);
+    for(let i = 0; i <= steps; i++){
+      const t = i / steps;
+      const cx = Math.floor(x0 + (x1 - x0) * t);
+      const cz = Math.floor(z0 + (z1 - z0) * t);
+      for(let ox = 0; ox < (w || 2); ox++){
+        for(let oz = 0; oz < (w || 2); oz++){
+          const px = cx + ox, pz = cz + oz;
+          /* Paving past the edge of the terrain would hang in the void exactly as
+             the houses did. Every cell is checked, not just the endpoints. */
+          if(Math.hypot(px, pz) > TOWN_R) continue;
+          const g = voxTop(px + 0.5, pz + 0.5);
+          /* Each stone sits on ITS OWN ground, so the street follows the hill
+             instead of floating off it. */
+          put(cobbleM, px + 0.5, g, pz + 0.5, 1);
+        }
+      }
+    }
+  }
+  street(-62, 36, 58, 36, 3);      // the road along the front of the town
+  street(-58, 49, 50, 49, 3);      // between the first and second rows
+  street(-50, 62, 44, 62, 3);      // between the second and third
+  street(-38, 74, 36, 74, 3);      // the upper terrace
+  street(-3, 34, -3, 84, 3);       // the main lane, climbing to the church
+  street(-34, 36, -34, 74, 2);     // a side lane
+  street(30, 36, 30, 74, 2);       // and another
   buildBackdrop();
 
   /* build the instanced meshes and register them as bullet-stopping cover */
@@ -1756,6 +2125,7 @@ const clouds = [];
   inst(roofM, texRoof);
   inst(winM, texWindow);
   inst(plankM, texPlank);
+  inst(cobbleM, texCobble);
 })();
 
 
@@ -2296,7 +2666,18 @@ function puffAt(p, col){
    PICKUPS — medals, grenade resupply, first-aid kits
    ============================================================ */
 const pickups = [];
+/* The player is walled in at VOX_R - 4. Pickups were not clamped at ALL, so a
+   health drop thrown out from a player standing near the rim landed beyond that
+   wall — visible, glinting, and permanently out of reach.
+
+   Clamped here rather than at the call sites, because there are several and the
+   next one added would have the same bug. Pulled a little inside the wall, so you
+   can actually stand ON the pickup instead of pressing against the wall beside
+   it. */
+const PICKUP_R = VOX_R - 6;
 function spawnPickup(type, x, z){
+  const rr = Math.hypot(x, z);
+  if(rr > PICKUP_R){ x *= PICKUP_R / rr; z *= PICKUP_R / rr; }
   let mesh, ttl = 25;
   if(type === 'medal'){
     mesh = new THREE.Mesh(new THREE.BoxGeometry(0.32,0.32,0.1),
@@ -2526,7 +2907,7 @@ const remainLabel = $('remain-label'), dmgDir = $('dmgdir');
    SETTINGS — persisted; sensitivity / bloom / sound
    ============================================================ */
 const settings = (function(){
-  let s = {sens:1, bloom:true, ssao:false, sound:true, music:true};
+  let s = {sens:1, bloom:true, ssao:false, sound:true, music:true, musicTrack:0};
   try{ Object.assign(s, JSON.parse(localStorage.getItem('mkSettings'))||{}); }catch(e){}
 
   /* SSAO IS OFF, DELIBERATELY. The pass works and is left in the code, but it is
@@ -2570,6 +2951,7 @@ function saveSettings(){ try{ localStorage.setItem('mkSettings', JSON.stringify(
   mu2.addEventListener('click', togMusic);
   paint();
 })();
+
 
 /* ============================================================
    MUSIC — original synthesized theme in 7/8 (3+2+2), D minor.
@@ -2641,7 +3023,7 @@ const Music = (function(){
       droneNodes.push(o, flt, g);
     });
   }
-  /* precompute the loop's event list in eighth offsets */
+  /* precompute the oro's event list in eighth offsets */
   const EVENTS = (function(){
     const ev = [];
     let e = 0;
@@ -2652,16 +3034,127 @@ const Music = (function(){
     ev.sort((a,b)=> a.e - b.e);
     return ev;
   })();
+
+  /* ============================================================
+     TRACK 2 — „ЗА СЛОБОДА" · an elegy
+
+     Slow analog-synth lament: an arpeggio turning underneath, a sustained pad,
+     and a mournful line over the top. That IDIOM — and the instrumentation that
+     goes with it — is not anyone's property. The melody below is written here,
+     for this game; it is not a transcription of anything.
+
+     D natural minor, 4/4, i–VI–III–VII, which is about as common a progression
+     as exists. Slow enough to sit under a fight without pushing it.
+     ============================================================ */
+  const E2 = 0.34;                              // slower: this one breathes
+  const CHORDS = [                              // one per bar: [root, third, fifth]
+    [50,53,57], [50,53,57],                     // Dm
+    [46,50,53], [46,50,53],                     // Bb
+    [41,45,48], [41,45,48],                     // F
+    [48,52,55], [48,52,55],                     // C
+  ];
+  /* [midi, eighths] — 8 bars of 8. An original phrase. */
+  const LAMENT = [
+    [69,4],[65,2],[67,2],
+    [69,6],[62,2],
+    [74,4],[72,2],[70,2],
+    [69,8],
+    [65,4],[67,2],[69,2],
+    [72,6],[70,2],
+    [70,4],[69,2],[67,2],
+    [65,6],[62,2],
+  ];
+  const LOOP2_E = 64;
+
+  /* the turning figure underneath — root, fifth, octave, fifth */
+  function playArp(t, midi){
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.value = f(midi);
+    const flt = ctx.createBiquadFilter();
+    flt.type = 'lowpass'; flt.frequency.value = 1100;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.055, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + E2 * 0.9);
+    o.connect(flt); flt.connect(g); g.connect(master);
+    o.start(t); o.stop(t + E2);
+  }
+  /* the pad: slow swell, two detuned saws, well back in the mix */
+  function playPad(t, triad, bars){
+    const dur = bars * 8 * E2;
+    triad.forEach(midi=>{
+      [0, 7].forEach(det=>{
+        const o = ctx.createOscillator(); o.type = 'sawtooth';
+        o.frequency.value = f(midi); o.detune.value = det;
+        const flt = ctx.createBiquadFilter();
+        flt.type = 'lowpass'; flt.frequency.value = 700;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.020, t + 0.7);      // slow swell
+        g.gain.setValueAtTime(0.020, t + dur - 0.8);
+        g.gain.linearRampToValueAtTime(0.0001, t + dur);
+        o.connect(flt); flt.connect(g); g.connect(master);
+        o.start(t); o.stop(t + dur + 0.1);
+      });
+    });
+  }
+  /* the lead: a single voice, held, with a slow vibrato that arrives late */
+  function playLament(t, midi, durE){
+    const dur = durE * E2;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.value = f(midi);
+    const flt = ctx.createBiquadFilter();
+    flt.type = 'lowpass'; flt.frequency.value = 1500; flt.Q.value = 3;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 4.6;
+    const lfoG = ctx.createGain();
+    lfoG.gain.setValueAtTime(0, t);
+    lfoG.gain.linearRampToValueAtTime(5, t + dur * 0.6);     // vibrato blooms
+    lfo.connect(lfoG); lfoG.connect(o.detune);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.10, t + 0.10);
+    g.gain.setValueAtTime(0.10, t + Math.max(0.12, dur - 0.30));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(flt); flt.connect(g); g.connect(master);
+    o.start(t); lfo.start(t);
+    o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+  }
+
+  const EVENTS2 = (function(){
+    const ev = [];
+    let e = 0;
+    LAMENT.forEach(n=>{ ev.push({e, lead:n[0], dur:n[1]}); e += n[1]; });
+    CHORDS.forEach((tri, bar)=>{
+      if(bar % 2 === 0) ev.push({e: bar*8, pad: tri, bars: 2});
+      /* four arpeggio notes a bar, on the even eighths */
+      const fig = [tri[0], tri[2], tri[0]+12, tri[2]];
+      fig.forEach((midi, k)=> ev.push({e: bar*8 + k*2, arp: midi}));
+    });
+    ev.sort((a,b)=> a.e - b.e);
+    return ev;
+  })();
+
+  /* ---- the two tracks, and the scheduler that drives whichever is playing ---- */
+  const TRACKS = [
+    { name:'Оро',        events: EVENTS,  loopE: LOOP_E,  eighth: EIGHTH, drone: true  },
+    { name:'За слобода', events: EVENTS2, loopE: LOOP2_E, eighth: E2,     drone: false },
+  ];
+  let trackIdx = 0;
+
   function tick(){
+    const T = TRACKS[trackIdx];
     const ahead = ctx.currentTime + 0.4;
     while(true){
-      const ev = EVENTS[evIdx];
-      const t = loopStart + ev.e * EIGHTH;
+      const ev = T.events[evIdx];
+      const t = loopStart + ev.e * T.eighth;
       if(t > ahead) break;
       if(ev.midi) playNote(t, ev.midi, ev.dur);
       if(ev.drum) playDrum(t, ev.drum);
+      if(ev.lead) playLament(t, ev.lead, ev.dur);
+      if(ev.arp)  playArp(t, ev.arp);
+      if(ev.pad)  playPad(t, ev.pad, ev.bars);
       evIdx++;
-      if(evIdx >= EVENTS.length){ evIdx = 0; loopStart += LOOP_E * EIGHTH; }
+      if(evIdx >= T.events.length){ evIdx = 0; loopStart += T.loopE * T.eighth; }
     }
   }
   function start(){
@@ -2671,7 +3164,7 @@ const Music = (function(){
       if(ctx.state === 'suspended') ctx.resume();
       evIdx = 0;
       loopStart = ctx.currentTime + 0.15;
-      startDrone();
+      if(TRACKS[trackIdx].drone) startDrone();
       timer = setInterval(tick, 120);
       tick();
     }catch(e){}
@@ -2680,6 +3173,14 @@ const Music = (function(){
     if(timer){ clearInterval(timer); timer = null; }
     droneNodes.forEach(n=>{ try{ n.stop ? n.stop() : n.disconnect(); }catch(e){} });
     droneNodes = [];
+  }
+  /* Alternates on each start, so a session hears both rather than one on repeat. */
+  function nextTrack(){
+    const was = !!timer;
+    stop();
+    trackIdx = (trackIdx + 1) % TRACKS.length;
+    if(was) start();
+    return TRACKS[trackIdx].name;
   }
   /* ---- триумфална фанфара во Ре-дур, брзо оро 7/8 ---- */
   function fanfareNote(t, midi, durE, E8, loud){
@@ -2726,7 +3227,65 @@ const Music = (function(){
       playDrum(tf, 1.2);
     }catch(err){}
   }
-  return {start, stop, victory};
+  function setTrack(i){
+    const was = !!timer;
+    stop();
+    trackIdx = ((i % TRACKS.length) + TRACKS.length) % TRACKS.length;
+    if(was) start();
+    return TRACKS[trackIdx].name;
+  }
+  return {start, stop, victory, nextTrack, setTrack,
+          count: ()=> TRACKS.length,
+          trackName: (i)=> TRACKS[i === undefined ? trackIdx : i].name};
+})();
+
+/* The music button. MUST live below the Music module, not above it: `const` is
+   hoisted but not initialised, so touching Music from an IIFE that runs earlier
+   throws a ReferenceError, kills the whole script, and every listener after it —
+   including the start button — never gets attached. Which is exactly what
+   happened. (wireSettings gets away with referencing Music because it only does
+   so inside a callback, which runs long after this point.)
+
+   One control, three states: a tap moves to the next track, and the tap after
+   the LAST track silences it. The label always says which, because a mute
+   control whose state you must press it to discover is worse than no control.
+
+   This matters most on a phone: there is no keyboard there, so the M shortcut is
+   useless, and music a player cannot silence without quitting the game is a
+   reliable way to collect one-star reviews. */
+(function wireMusicButton(){
+  const btn = $('musicbtn'), nameEl = $('musicname'), iconEl = $('musicicon');
+
+  function paint(){
+    btn.classList.toggle('off', !settings.music);
+    iconEl.textContent = settings.music ? '♪' : '✕';
+    nameEl.textContent = settings.music
+      ? Music.trackName(settings.musicTrack)
+      : 'без музика';
+  }
+  function cycle(e){
+    if(e) e.preventDefault();
+    if(!settings.music){
+      settings.music = true;  settings.musicTrack = 0;           // off -> first track
+    } else if(settings.musicTrack < Music.count() - 1){
+      settings.musicTrack++;                                     // next track
+    } else {
+      settings.music = false;                                    // past the last -> off
+    }
+    saveSettings();
+    if(settings.music){ Music.setTrack(settings.musicTrack); Music.start(); }
+    else Music.stop();
+    paint();
+  }
+
+  /* preventDefault on touchstart suppresses the synthesized click, so this does
+     not fire twice on a phone. */
+  btn.addEventListener('touchstart', cycle, {passive:false});
+  btn.addEventListener('click', cycle);
+  window.__musicCycle = cycle;                                   // reused by the M key
+
+  Music.setTrack(settings.musicTrack || 0);
+  paint();
 })();
 
 /* ============================================================
@@ -2782,6 +3341,36 @@ function setStance(n){
   state.stance = ((n % 3) + 3) % 3;
   stanceLabel.textContent = STANCE_NAMES[state.stance];
 }
+/* UNSTICK.
+   The movement code tries the full step, then X alone, then Z alone. If the
+   player's OWN position is already inside solid geometry, all three are blocked
+   and there is no escape: the game simply stops responding to input, and the run
+   is over. That is what "I got stuck behind a house and could not move" is — not
+   a collision quirk, a soft-lock.
+
+   It can happen wherever the world is tight: wedged between two buildings, walked
+   into a corner as the ground stepped under you, or standing where a block was
+   placed. Nothing anywhere detected it.
+
+   Search outward for the nearest clear spot and put the player there. Never
+   silently do nothing. */
+function unstickPlayer(PR){
+  if(!solidAt(camera.position.x, camera.position.z, PR)) return;   // not actually stuck
+  for(let r = 0.6; r <= 8; r += 0.6){
+    for(let a = 0; a < 16; a++){
+      const ang = (a / 16) * Math.PI * 2;
+      const nx = camera.position.x + Math.cos(ang) * r;
+      const nz = camera.position.z + Math.sin(ang) * r;
+      if(Math.hypot(nx, nz) > VOX_R - 4) continue;
+      if(!solidAt(nx, nz, PR)){
+        camera.position.x = nx;
+        camera.position.z = nz;
+        return;
+      }
+    }
+  }
+}
+
 function tryJump(){
   if(!state.running || state.paused) return;
   if(state.stance !== 0){ setStance(0); return; }
@@ -2916,12 +3505,12 @@ function gameOver(won){
   $('finalstats').innerHTML =
     'Поразени непријатели: <b>'+state.score+'</b><br>'+
     'Издржани бранови: <b>'+state.wave+'</b><br>'+
-    'Каменот држан: <b>'+mins.toFixed(1)+' мин</b>';
+    'Борбата траеше: <b>'+mins.toFixed(1)+' мин</b>';
   if(won){
     $('endtitle').innerHTML = 'СЛОБОДНО <span class="ck">КРУШЕВО</span>';
     $('endsub').textContent = 'Каменот издржа. Знамето на Републиката се вее над градот.';
   } else {
-    $('endtitle').innerHTML = 'ПАДНА <span class="ck">КАМЕНОТ</span>';
+    $('endtitle').innerHTML = 'ПАДНА <span class="ck">МЕЧКИН КАМЕН</span>';
     $('endsub').textContent = 'Тука, на 12 август 1903, падна Питу Гули со четата — но Мечкин Камен остана вечен спомен на слободата.';
   }
   const myId = recordScore(mins, state.score, state.wave, !!won);
@@ -3061,7 +3650,12 @@ document.addEventListener('keydown', e=>{
   if(e.code === 'Digit1') switchWeapon(0);
   if(e.code === 'Digit2') switchWeapon(1);
   if(e.code === 'Digit3') switchWeapon(2);
-  if(e.code === 'KeyB') hurlStone();
+  /* The stone sits in the 4 slot, alongside the weapons — it is the fourth thing
+     you can bring to bear, so it belongs on the fourth key. B still works. */
+  if(e.code === 'Digit4' || e.code === 'KeyB') hurlStone();
+  if(e.code === 'KeyR') manualReload();
+  /* Same path as the button, so keyboard and touch can never disagree. */
+  if(e.code === 'KeyM') window.__musicCycle();
 });
 document.addEventListener('keyup', e=>{
   if(CODE_MOVE[e.code]) keys[CODE_MOVE[e.code]] = false;
@@ -3325,6 +3919,7 @@ const ALLY_POSTS = [
   [ 4.0, -6.5],   // forward right
 ];
 const ALLY_RANGE = 42;   // was 65: a komita with an old rifle, not a sniper
+const ALLY_ROAM  = 6.0;  // how far from his post a man will range to get a shot
 
 function spawnAllies(){
   ALLY_DEFS.forEach((def, i)=>{
@@ -3334,10 +3929,49 @@ function spawnAllies(){
     mesh.position.set(px, g, pz);
     scene.add(mesh);
     allies.push({mesh, def, gy:g, postX:px, postZ:pz,
+      roamX:px, roamZ:pz, repostT:1 + Math.random()*3,
       health:100, alive:true, dying:0, gone:false,
       fireTimer:1.5+Math.random()*2.5, walkPhase:Math.random()*6});
   });
   showMsg('ПИТУ ГУЛИ И БОРЦИТЕ ПРИСТИГНУВААТ!', 2600);
+}
+
+function allyCanSee(al, en){
+  const ap = al.mesh.position;
+  return clearLine(
+    new THREE.Vector3(ap.x, ap.y + 1.5, ap.z),
+    new THREE.Vector3(en.mesh.position.x, en.mesh.position.y + 1.4, en.mesh.position.z));
+}
+
+/* Pick a new firing spot within the man's own sector.
+   Holding a post does not mean standing still: a komita whose view is blocked
+   MOVES to where he has a shot. Earlier they orbited the player like bodyguards;
+   then I nailed them to a post and they became statues. Neither is a soldier.
+   They now work their patch — shifting for a line of fire, and shifting again
+   every few seconds even when they have one, because men under fire do not stand
+   in the open like fenceposts. */
+function allyRepost(al){
+  let bestX = al.postX, bestZ = al.postZ, bestSeen = -1;
+  for(let i = 0; i < 8; i++){
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * ALLY_ROAM;
+    const nx = al.postX + Math.cos(a) * r;
+    const nz = al.postZ + Math.sin(a) * r;
+    if(solidAt(nx, nz, 0.4)) continue;
+
+    const probe = new THREE.Vector3(nx, voxTop(nx, nz) + 1.5, nz);
+    let seen = 0;
+    enemies.forEach(en=>{
+      if(!en.alive) return;
+      const ep = en.mesh.position;
+      if(ep.distanceTo(probe) > ALLY_RANGE) return;
+      if(clearLine(probe, new THREE.Vector3(ep.x, ep.y + 1.4, ep.z))) seen++;
+    });
+    if(seen > bestSeen){ bestSeen = seen; bestX = nx; bestZ = nz; }
+  }
+  al.roamX = bestX;
+  al.roamZ = bestZ;
+  al.repostT = 3.5 + Math.random() * 4.5;
 }
 
 function hurtAlly(al, dmg){
@@ -3442,6 +4076,24 @@ function boulderImpact(p){
     if(en.alive && en.mesh.position.distanceTo(p) < BLAST){ killEnemy(en, false); killed++; }
   });
   if(killed > 0) showMsg('МЕЧКИН КАМЕН · ' + killed + ' Турци!', 1600);
+}
+
+/* Manual reload (R).
+   Reloading was purely automatic: every shot set a timer, and the Mannlicher's
+   clip refilled itself only once it ran dry. So there was no way to top up during
+   a lull — you were forced to be caught empty. This lets you change the clip on
+   your own terms, which is the whole point of R in any shooter.
+
+   Only clip-fed weapons have anything to reload; the single-shot Berdana and the
+   cannon reload per shot by their nature. */
+function manualReload(){
+  if(!state.running || state.paused || state.reload > 0) return;
+  const W = WEAPONS[state.weapon];
+  if(!W.mag || state.mag >= W.mag) return;      // nothing to gain
+  state.reload = W.clipReload;
+  state.clipping = true;                        // refilled when the reload finishes
+  clipPing();
+  updateAmmoHUD();
 }
 
 function fire(){
@@ -3683,6 +4335,7 @@ function animate(){
       if(!solidAt(nx, nz, PR)){ fx = nx; fz = nz; }
       else if(!solidAt(nx, camera.position.z, PR)){ fx = nx; }
       else if(!solidAt(camera.position.x, nz, PR)){ fz = nz; }
+      else unstickPlayer(PR);   // all three blocked: we may be wedged INSIDE geometry
       const rr = Math.hypot(fx, fz);
       if(rr > VOX_R - 4){ fx *= (VOX_R-4)/rr; fz *= (VOX_R-4)/rr; }
       camera.position.x = fx;
@@ -3961,27 +4614,40 @@ function animate(){
       }
       if(!al.alive) return;
 
-      const dx = al.postX - p.x, dz = al.postZ - p.z;
-      const d = Math.hypot(dx, dz);
-
       let tgt=null, bd=1e9;
       enemies.forEach(en=>{ if(en.alive){ const dd=en.mesh.position.distanceTo(p); if(dd<bd){bd=dd;tgt=en;} } });
       if(tgt) al.mesh.rotation.y = Math.atan2(tgt.mesh.position.x - p.x, tgt.mesh.position.z - p.z);
 
-      if(d > 1.0){                            // walk back to the post if shoved off it
+      /* Reposition when the shot is blocked, or simply when he has been in one
+         spot too long. This is what stops him being a fencepost. */
+      al.repostT -= dt;
+      if(al.repostT <= 0 || (tgt && bd < ALLY_RANGE && !allyCanSee(al, tgt))){
+        allyRepost(al);
+      }
+
+      const dx = al.roamX - p.x, dz = al.roamZ - p.z;
+      const d = Math.hypot(dx, dz);
+
+      if(d > 0.4){                            // move to the firing spot
         al.walkPhase += dt*9;
-        const sp = Math.min(4.4, d*2);
+        const sp = Math.min(4.4, d*2.4);
         const nx = p.x + dx/d * sp * dt, nz = p.z + dz/d * sp * dt;
         if(!solidAt(nx, nz, 0.35)){ p.x = nx; p.z = nz; }
         else if(!solidAt(nx, p.z, 0.35)){ p.x = nx; }
         else if(!solidAt(p.x, nz, 0.35)){ p.z = nz; }
+        else al.repostT = 0;                  // wedged: pick somewhere else
         const gT = voxTop(p.x,p.z); al.gy += (gT-al.gy)*Math.min(1,dt*10); p.y = al.gy;
         const sw = Math.sin(al.walkPhase);
         parts.legL.rotation.x = -sw*0.6; parts.legR.rotation.x = sw*0.6;
         parts.armL.rotation.x = sw*0.4;  parts.armR.rotation.x = -sw*0.4;
       } else {
+        /* Set: rifle up, but still breathing. A dead-still model reads as a bug
+           even when the logic behind it is fine. */
+        al.walkPhase += dt*1.6;
+        const br = Math.sin(al.walkPhase) * 0.04;
         parts.legL.rotation.x = 0; parts.legR.rotation.x = 0;
-        parts.armR.rotation.x = -1.3; parts.armL.rotation.x = -1.0;   // rifle shouldered
+        parts.armR.rotation.x = -1.3 + br;
+        parts.armL.rotation.x = -1.0 + br;
       }
 
       al.fireTimer -= dt;
