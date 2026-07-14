@@ -465,7 +465,11 @@ const Q = IS_MOBILE ? {
   shadowType:   THREE.PCFShadowMap,   // PCFSoft samples too many taps here
   shadowExtent: 70,      // tighter frustum = more texel density from a smaller map
   shadowFar:    200,
-  fogNear:      55, fogFar: 170,
+  /* Fog has to clear the backdrop, or the valley is swallowed before it can be
+     seen. Pushed out past BACKDROP_R — the haze then stops being a curtain and
+     becomes atmospheric perspective: the far ridges wash toward the sky, which
+     is exactly how the eye reads distance. */
+  fogNear:      70, fogFar: 460,
   bloomScale:   0.35,    // bloom render targets, as a fraction of screen size
   bloomPasses:  1,
   ssaoScale:    0.5,     // AO is blurred anyway, so half-res costs nothing visible
@@ -478,7 +482,7 @@ const Q = IS_MOBILE ? {
   shadowType:   THREE.PCFSoftShadowMap,
   shadowExtent: 120,
   shadowFar:    260,
-  fogNear:      80, fogFar: 260,
+  fogNear:      90, fogFar: 560,
   bloomScale:   0.5,
   bloomPasses:  2,
   ssaoScale:    0.6,
@@ -561,8 +565,12 @@ window.addEventListener('resize', ()=>{
    a long shadow, and the ground stops being a surface and becomes a place. The
    ambient is pulled down to match, so those shadows actually read as dark rather
    than being filled straight back in. */
-scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x8a7a52, 0.52));   // sky fill + warm ground bounce
-const sun = new THREE.DirectionalLight(0xffe6b4, 1.55);           // low, warm key light
+/* A low sun backlights everything facing the player, so those faces are lit by
+   ambient ALONE. Cutting the ambient at the same time crushed every rock to
+   black — drama bought at the cost of being able to see. Readability first:
+   the ambient carries the faces the key light cannot reach. */
+scene.add(new THREE.HemisphereLight(0xcfe0ff, 0xa08e6a, 0.74));   // sky fill + warm ground bounce
+const sun = new THREE.DirectionalLight(0xffe6b4, 1.45);           // low, warm key light
 sun.position.set(-95, 40, -62);
 sun.castShadow = Q.shadows;
 sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
@@ -588,8 +596,10 @@ function trackSun(){
 }
 trackSun();
 
-/* subtle warm rim fill from the opposite side to lift the shadows */
-const fill = new THREE.DirectionalLight(0xffe6c4, 0.18);
+/* Fill from the sun's opposite side — which is the CAMERA's side. With a low key
+   light this is doing real work, not decoration: it is the only directional light
+   reaching the faces the player is actually looking at. */
+const fill = new THREE.DirectionalLight(0xffe6c4, 0.42);
 fill.position.set(70, 40, 60);
 scene.add(fill);
 
@@ -774,9 +784,13 @@ const Bloom = (function(){
          wash over the whole image. 0.5 darkens creases and leaves open faces
          alone; the earlier 0.85 was doing far too much of the lighting. */
       aoStrength:{value:0.5},
-      contrast:{value:1.10},
+      /* Contrast pivots around 0.5, so it darkens everything below mid-grey. With
+         a low sun already putting half the scene in shadow, a heavy curve here
+         crushes those shadows to black. Keep it gentle and let the LIGHT do the
+         shaping. */
+      contrast:{value:1.04},
       saturation:{value:1.18},
-      vignette:{value:0.28},
+      vignette:{value:0.26},
     },
     vertexShader:VERT,
     fragmentShader:[
@@ -1239,16 +1253,146 @@ function rockBlock(x, y, z, s){
   }
 });
 
-/* scattered boulders */
+/* ============================================================
+   THE BACKDROP — Пелагонија
+
+   The playable world ends at VOX_R (100), and the player can walk to within 4
+   units of that. Standing on the rim, the world simply STOPPED — a cliff of
+   nothing. You are meant to be on a mountain above the largest plain in the
+   country, and instead you were standing on a floating disc.
+
+   So: a purely visual landscape beyond the rim. It can never be reached (the
+   player is clamped well inside it), so it is free to be coarse. Its blocks are
+   BACKDROP_STEP across rather than 1, which puts ~7,000 columns into two draw
+   calls instead of half a million into a hundred.
+
+   The composition is not arbitrary. The askers already advance from -Z, and the
+   Ottomans historically came up from Bitola — which sits IN Pelagonia. So the
+   plain opens in exactly the direction they come from: you look down off the rock
+   into the valley and watch them climb toward you. Mountains close the horizon in
+   every OTHER direction, so there is one way in, and one thing worth holding.
+   ============================================================ */
+/* PERFORMANCE. The first version cost real framerate on the phone, three ways:
+
+     - 8px columns gave ~9,000 boxes. It is scenery hundreds of metres away; the
+       resolution is invisible. 14px gives ~2,900 and looks identical.
+     - Every column was 90 units TALL, so looking across the plain meant dozens of
+       boxes stacked behind every pixel. Overdraw, not triangle count, is what
+       kills a mobile GPU. Each column is now only as deep as it needs to be.
+     - frustumCulled was off, and everything lived in one mesh, so the entire
+       backdrop drew even when it was all behind you. It is now split into
+       sectors, and the ones at your back get culled.
+*/
+const BACKDROP_STEP = 14;
+const BACKDROP_R    = 440;    // the camera's far plane is 600, so this fits
+const BACKDROP_SECT = 8;      // angular sectors, so the ones behind you can cull
+const PLAIN_Y       = -54;    // floor of the plain
+
+function farHeight(x, z){
+  const d = Math.hypot(x, z) || 1;
+  const rimH = -VOX_R * 0.09;                   // height where the playable ground ends
+
+  /* The escarpment: ground falls away from the rim down onto the plain.
+     Smoothstepped, so the rim meets the drop without a visible seam. */
+  const t = Math.min(1, Math.max(0, (d - VOX_R) / 120));
+  const s = t * t * (3 - 2 * t);
+  let h = rimH + (PLAIN_Y - rimH) * s;
+
+  /* Relief on the plain floor — a plain is flat, not a table. */
+  h += fbm(x * 0.010, z * 0.010) * 6 * s;
+
+  /* Mountains ring the horizon, EXCEPT toward -Z, where Pelagonia runs away flat
+     to the skyline. That gap is the entire point of the view. */
+  const toValley = -z / d;                      // +1 = straight out over the valley
+  const mask = Math.max(0, 1 - Math.max(0, toValley) * 1.45);
+  const rise = Math.max(0, (d - 230) / 180);
+  h += mask * rise * rise * 165 * (0.55 + 0.45 * fbm(x * 0.0045, z * 0.0045));
+
+  return h;
+}
+
+function buildBackdrop(){
+  /* buckets[sector][0] = plain columns, [1] = mountain columns */
+  const buckets = Array.from({length: BACKDROP_SECT}, ()=> [[], []]);
+  const m = new THREE.Matrix4();
+  const half = BACKDROP_STEP / 2;
+  const FLOOR = PLAIN_Y - 22;                   // nothing is ever seen below this
+  let total = 0;
+
+  for(let x = -BACKDROP_R; x <= BACKDROP_R; x += BACKDROP_STEP){
+    for(let z = -BACKDROP_R; z <= BACKDROP_R; z += BACKDROP_STEP){
+      const cx = x + half, cz = z + half;
+      const d = Math.hypot(cx, cz);
+      if(d <= VOX_R + 2 || d > BACKDROP_R) continue;   // leave the playable disc alone
+
+      const top = Math.round(farHeight(cx, cz) / 2) * 2;   // stays stepped, like the world
+
+      /* Only as deep as it needs to be. A uniform 90-tall box meant every pixel
+         of the plain had a dozen boxes behind it — and overdraw, not triangles,
+         is what a mobile GPU chokes on. */
+      const H = Math.max(6, top - FLOOR);
+      m.compose(
+        new THREE.Vector3(cx, top - H/2, cz),
+        new THREE.Quaternion(),
+        new THREE.Vector3(BACKDROP_STEP, H, BACKDROP_STEP),
+      );
+
+      const sect = Math.floor(
+        ((Math.atan2(cz, cx) + Math.PI) / (Math.PI*2)) * BACKDROP_SECT
+      ) % BACKDROP_SECT;
+      buckets[sect][top > 16 ? 1 : 0].push(m.clone());
+      total++;
+    }
+  }
+
+  const texOf = [texGrassTop, texStone];
+  buckets.forEach(sector=>{
+    sector.forEach((mats, kind)=>{
+      if(!mats.length) return;
+      const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),
+        new THREE.MeshLambertMaterial({map: texOf[kind]}), mats.length);
+      mats.forEach((mm, i)=> mesh.setMatrixAt(i, mm));
+      mesh.instanceMatrix.needsUpdate = true;
+      /* Scenery: no shadows. Casting from thousands of distant boxes would spend
+         the whole shadow map on ground the player can never stand on. */
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      /* Left CULLABLE, and split by sector so the half of the backdrop behind the
+         player is actually dropped instead of drawn. */
+      mesh.frustumCulled = true;
+      scene.add(mesh);
+    });
+  });
+  console.log('backdrop:', total, 'columns in', BACKDROP_SECT, 'sectors');
+}
+
+/* Scattered boulders.
+   These used to float. Two reasons, both real:
+
+     - the ground height was sampled ONCE at the cluster's centre, then every
+       block in the cluster was placed at that height — but the blocks are
+       offset around the centre, so on any slope they hovered or sank; and
+     - a random `oy` lifted blocks a level with nothing guaranteed beneath them,
+       which is a boulder hanging in mid-air by construction.
+
+   It matters more than it looks: blockCell() blocks a whole COLUMN regardless of
+   height, so a boulder floating at head height was also walling off the ground
+   under it — an invisible obstacle with nothing visibly there.
+
+   Now every column is grounded on its OWN terrain height and stacked contiguously
+   upward from it, so a boulder always touches the ground it sits on. */
 for(let i=0;i<44;i++){
   const a = Math.random()*Math.PI*2, r = 14+Math.random()*82;
-  const bx = Math.cos(a)*r, bz = Math.sin(a)*r;
-  const g = voxTop(bx, bz);
+  const bx = Math.floor(Math.cos(a)*r), bz = Math.floor(Math.sin(a)*r);
   const n = 2+Math.floor(Math.random()*5);
   for(let k=0;k<n;k++){
-    const ox = Math.floor(Math.random()*2), oz = Math.floor(Math.random()*2);
-    const oy = Math.floor(Math.random()*2);
-    rockBlock(Math.floor(bx)+ox+0.5, g+0.5+oy, Math.floor(bz)+oz+0.5, 1);
+    const cx = bx + Math.floor(Math.random()*3) - 1;
+    const cz = bz + Math.floor(Math.random()*3) - 1;
+    const g = voxTop(cx + 0.5, cz + 0.5);          // ground under THIS column
+    const stack = 1 + Math.floor(Math.random()*2);
+    for(let h = 0; h < stack; h++){
+      rockBlock(cx + 0.5, g + 0.5 + h, cz + 0.5, 1);
+    }
   }
 }
 const rocksInst = (function(){
@@ -1593,6 +1737,7 @@ const clouds = [];
   ];
   plots.forEach(p=> buildHouse(p[0], p[1], p[2], p[3]));
   buildChurch(-2, 70);
+  buildBackdrop();
 
   /* build the instanced meshes and register them as bullet-stopping cover */
   function inst(mats, tex, shade, faceShade){
@@ -2613,6 +2758,7 @@ function perfSample(ms){
   if(perf.n >= 90){
     const avg = perf.acc / perf.n;
     perf.acc = 0; perf.n = 0;
+
     /* Shed the most expensive effect first and the cheapest last. AO is a full
        extra pass plus a blur, so it goes before bloom; resolution is the last
        resort because dropping it is the most visible. */
@@ -3028,9 +3174,13 @@ function switchWeapon(i){
   state.mag = WEAPONS[i].mag || 0;
   WEAPON_MODELS.forEach((m,k)=> m.visible = (k === i));
   document.querySelectorAll('.wslot').forEach(b=> b.classList.toggle('on', +b.dataset.w === i));
-  /* the cherry cannon is set DOWN on the ground and aimed, not carried */
+  /* The cherry cannon is set DOWN on the ground and aimed, not carried.
+     It has to sit much further out than a rifle: the trunk is 1.4 long and its
+     trail leg runs back another 0.7, so at the old -1.15 the rear of the carriage
+     ended up half a metre from the player's eye and the whole gun filled the
+     screen as an orange slab. Pushed out far enough to read as an object. */
   if(WEAPONS[i].kind === 'cannon'){
-    weaponGroup.position.set(0, -0.62, -1.15);       // low, planted in front
+    weaponGroup.position.set(0, -0.74, -1.95);       // low, planted well in front
     wgBaseY = 0;
   } else {
     weaponGroup.position.set(0.16, -0.16, -0.42);    // shouldered carry
@@ -3163,36 +3313,77 @@ function buildAlly(def){
   g.userData = {armL,armR,legL,legR};
   return g;
 }
+/* Posts on the line, in WORLD coordinates. The komiti came to hold the rock, not
+   to escort the player around it. Anchoring them to the position — flanking the
+   parapet, with Pitu Guli on the Kamen itself — means the line holds whether you
+   stand in it or not, which is the whole point of a defence. */
+const ALLY_POSTS = [
+  [ 0.5,  2.6],   // Питу Гули — up on the Kamen behind the line
+  [-6.0, -3.0],   // left of the parapet
+  [ 6.0, -3.0],   // right of the parapet
+  [-3.0, -6.5],   // forward left
+  [ 4.0, -6.5],   // forward right
+];
+const ALLY_RANGE = 42;   // was 65: a komita with an old rifle, not a sniper
+
 function spawnAllies(){
   ALLY_DEFS.forEach((def, i)=>{
     const mesh = buildAlly(def);
-    const ang = (i/ALLY_DEFS.length)*Math.PI - Math.PI*0.0;
-    const ox = Math.cos(ang)*4.2, oz = Math.sin(ang)*3 + 2.2;   // fan behind/beside you
-    const x = camera.position.x + ox, z = camera.position.z + oz;
-    mesh.position.set(x, voxTop(x,z), z);
+    const [px, pz] = ALLY_POSTS[i % ALLY_POSTS.length];
+    const g = voxTop(px, pz);
+    mesh.position.set(px, g, pz);
     scene.add(mesh);
-    allies.push({mesh, def, gy:voxTop(x,z),
-      fireTimer:0.8+Math.random()*1.5, walkPhase:Math.random()*6, offX:ox, offZ:oz});
+    allies.push({mesh, def, gy:g, postX:px, postZ:pz,
+      health:100, alive:true, dying:0, gone:false,
+      fireTimer:1.5+Math.random()*2.5, walkPhase:Math.random()*6});
   });
   showMsg('ПИТУ ГУЛИ И БОРЦИТЕ ПРИСТИГНУВААТ!', 2600);
 }
+
+function hurtAlly(al, dmg){
+  if(!al.alive) return;
+  al.health -= dmg;
+  puffAt(new THREE.Vector3(al.mesh.position.x, al.mesh.position.y + 1.3,
+                           al.mesh.position.z), 0x8f2b1f);
+  if(al.health > 0) return;
+  al.alive = false;
+  al.dying = 0.001;
+  showMsg(al.def.name.toUpperCase() + ' ПАДНА', 1800);
+}
+
 function allyShoot(al){
-  let best=null, bd=1e9;
+  let best = null, bd = 1e9;
   const ap = al.mesh.position;
   enemies.forEach(en=>{
     if(!en.alive) return;
     const d = en.mesh.position.distanceTo(ap);
-    if(d < 65 && d < bd){
+    if(d < ALLY_RANGE && d < bd){
       const m = new THREE.Vector3(ap.x, ap.y+1.5, ap.z);
-      if(clearLine(m, new THREE.Vector3(en.mesh.position.x, en.mesh.position.y+1.4, en.mesh.position.z))){
+      if(clearLine(m, new THREE.Vector3(en.mesh.position.x, en.mesh.position.y+1.4,
+                                        en.mesh.position.z))){
         bd = d; best = en;
       }
     }
   });
-  if(best){
-    shotSound(false);
-    puffAt(new THREE.Vector3(ap.x, ap.y+1.5, ap.z));
-    if(Math.random() < 0.55) killEnemy(best, false);
+  if(!best) return;
+
+  shotSound(false);
+  puffAt(new THREE.Vector3(ap.x, ap.y+1.5, ap.z));
+
+  /* Men with old rifles, not a targeting computer. Accuracy falls off hard with
+     range, and — crucially — a MISS IS SEEN: dust kicks up beside the asker. The
+     old code killed on a flat 55% with no miss at all, at 65 metres, five times
+     over. Five allies firing every ~1.5s at 55% is roughly 1.5 kills per SECOND,
+     against a wave that spawns one asker every 1.5s. They deleted the wave as
+     fast as it arrived — which is exactly why it felt like a cheat. */
+  const chance = Math.max(0.08, 0.40 - bd * 0.0075);
+  if(Math.random() < chance){
+    killEnemy(best, false);
+  } else {
+    const ep = best.mesh.position;
+    const a = Math.random()*Math.PI*2, rr = 0.8 + Math.random()*1.8;
+    const ix = ep.x + Math.cos(a)*rr, iz = ep.z + Math.sin(a)*rr;
+    puffAt(new THREE.Vector3(ix, voxTop(ix,iz)+0.15, iz), 0xcdc4ae);
   }
 }
 
@@ -3321,27 +3512,60 @@ function fire(){
   }
 }
 
+/* An asker picks the nearest thing it can see — you OR a komita.
+
+   Reinforcements that cannot be shot at are not reinforcements, they are a
+   cheat. The bias below keeps the fight coming at YOU: a komita has to be
+   meaningfully closer than the player before an asker prefers it. */
+const ALLY_TARGET_BIAS = 0.75;
+function enemyPickTarget(en){
+  const p = en.mesh.position;
+  muzzle.set(p.x, p.y + 1.55, p.z);
+  let best = { pos: camera.position.clone(), ally: null,
+               d: muzzle.distanceTo(camera.position) };
+  allies.forEach(al=>{
+    if(!al.alive) return;
+    const ap = new THREE.Vector3(al.mesh.position.x, al.mesh.position.y + 1.5,
+                                 al.mesh.position.z);
+    const d = muzzle.distanceTo(ap);
+    if(d * ALLY_TARGET_BIAS < best.d) best = { pos: ap, ally: al, d };
+  });
+  return best;
+}
+
 function enemyShootsPlayer(en){
   const p = en.mesh.position;
   muzzle.set(p.x, p.y + 1.55, p.z);
+  const tgt = enemyPickTarget(en);
+
   shotSound(false);
   puffAt(new THREE.Vector3(p.x, p.y+1.55, p.z));
-  /* COVER: the shot stops in stone or terrain between you */
-  if(terrainBlocks(muzzle, camera.position)){ return; }
-  const rd = rockBlockDist(muzzle, camera.position);
-  const pd = muzzle.distanceTo(camera.position);
+  en.recoilT = 0.25;
+
+  /* COVER: the shot stops in stone or terrain between them and the target */
+  if(terrainBlocks(muzzle, tgt.pos)) return;
+  const rd = rockBlockDist(muzzle, tgt.pos);
+  const pd = muzzle.distanceTo(tgt.pos);
   if(rd < pd - 0.3){
-    /* bullet hits your cover — sparks off the rock */
     const ip = muzzle.clone().addScaledVector(losDir, rd);
     puffAt(ip, 0xb8b2a4);
     thudSound();
     return;
   }
-  /* moving targets are harder to hit — sprinting hardest of all */
+
+  /* ---- the round is aimed at a komita ---- */
+  if(tgt.ally){
+    const chance = Math.min(0.42, 8/pd + 0.04) * (en.accMod || 1);
+    if(Math.random() < chance) hurtAlly(tgt.ally, 16 + Math.random()*14);
+    else puffAt(new THREE.Vector3(tgt.pos.x + rnd(-1,1), tgt.pos.y - 1.2,
+                                  tgt.pos.z + rnd(-1,1)), 0xcdc4ae);
+    return;
+  }
+
+  /* ---- the round is aimed at you ---- */
   const speedMod = state.moveSpeed > 6 ? 0.45 : state.moveSpeed > 2.4 ? 0.6 : 1;
   const chance = Math.min(0.5, 9/pd + 0.05) * HITMOD_BY_STANCE[state.stance]
                * speedMod * (en.accMod || 1);
-  en.recoilT = 0.25;
   if(Math.random() < chance){
     state.health -= 8 + Math.random()*7;
     state.shakeT = 0.25;
@@ -3375,6 +3599,7 @@ function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   perfSample(dt*1000);
+
   if(state.paused){
     drawFrame();
     return;
@@ -3722,19 +3947,30 @@ function animate(){
       }
     }
 
-    /* allies: hold beside you, face and fire at the nearest enemy */
+    /* Allies: HOLD THE POST, face the nearest asker, fire. They no longer trail
+       the player around the map — they are a defence, not an escort. */
     allies.forEach(al=>{
       const parts = al.mesh.userData;
-      const tx = camera.position.x + al.offX, tz = camera.position.z + al.offZ;
       const p = al.mesh.position;
-      const dx = tx - p.x, dz = tz - p.z;
+
+      if(al.dying > 0){                       // toppling
+        al.dying += dt;
+        al.mesh.rotation.x = Math.min(1, al.dying * 2.2) * (Math.PI/2);
+        if(al.dying > 1.4 && !al.gone){ al.gone = true; scene.remove(al.mesh); }
+        return;
+      }
+      if(!al.alive) return;
+
+      const dx = al.postX - p.x, dz = al.postZ - p.z;
       const d = Math.hypot(dx, dz);
+
       let tgt=null, bd=1e9;
       enemies.forEach(en=>{ if(en.alive){ const dd=en.mesh.position.distanceTo(p); if(dd<bd){bd=dd;tgt=en;} } });
       if(tgt) al.mesh.rotation.y = Math.atan2(tgt.mesh.position.x - p.x, tgt.mesh.position.z - p.z);
-      if(d > 2.4){
+
+      if(d > 1.0){                            // walk back to the post if shoved off it
         al.walkPhase += dt*9;
-        const sp = Math.min(6.5, d*2);
+        const sp = Math.min(4.4, d*2);
         const nx = p.x + dx/d * sp * dt, nz = p.z + dz/d * sp * dt;
         if(!solidAt(nx, nz, 0.35)){ p.x = nx; p.z = nz; }
         else if(!solidAt(nx, p.z, 0.35)){ p.x = nx; }
@@ -3745,11 +3981,13 @@ function animate(){
         parts.armL.rotation.x = sw*0.4;  parts.armR.rotation.x = -sw*0.4;
       } else {
         parts.legL.rotation.x = 0; parts.legR.rotation.x = 0;
-        parts.armR.rotation.x = -1.3; parts.armL.rotation.x = -1.0;
+        parts.armR.rotation.x = -1.3; parts.armL.rotation.x = -1.0;   // rifle shouldered
       }
+
       al.fireTimer -= dt;
       if(al.fireTimer <= 0){
-        al.fireTimer = 1.2 + Math.random()*1.4;
+        /* was 1.2-2.6s; now 2.6-4.8s. Slower men, older rifles. */
+        al.fireTimer = 2.6 + Math.random()*2.2;
         allyShoot(al);
       }
     });
@@ -3879,6 +4117,7 @@ function animate(){
     pf.m.material.opacity = Math.max(0, 0.75 - pf.t*0.95);
     if(pf.t > 0.85){ pf.active = false; pf.m.visible = false; }
   }
+
 
   drawFrame();
 }
