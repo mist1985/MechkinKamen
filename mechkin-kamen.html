@@ -527,10 +527,14 @@ window.addEventListener('resize', ()=>{
       'gl_FragColor = vec4(c + (dith-0.5)*0.012, 1.0); }'
   });
   scene.add(new THREE.Mesh(geo, mat));
-  /* bright sun core */
-  const sunSq = new THREE.Mesh(new THREE.PlaneGeometry(30,30),
-    new THREE.MeshBasicMaterial({color:0xfff6e0, fog:false}));
-  sunSq.position.set(-210, 250, -150); sunSq.lookAt(0,0,0); scene.add(sunSq);
+  /* Bright sun core. Its position must lie along the DirectionalLight's own
+     direction — if the disc sits in one part of the sky while the shadows fall
+     as though it were somewhere else, the scene reads as broken even to someone
+     who could not say why. Light is at (-95, 40, -62); this is that vector,
+     normalised and pushed out to the old distance. */
+  const sunSq = new THREE.Mesh(new THREE.PlaneGeometry(34,34),
+    new THREE.MeshBasicMaterial({color:0xfff2d2, fog:false}));
+  sunSq.position.set(-284, 119, -185); sunSq.lookAt(0,0,0); scene.add(sunSq);
   /* soft radial glow (the shader "bloom" around the sun) */
   const gc = document.createElement('canvas'); gc.width = gc.height = 256;
   const gx = gc.getContext('2d');
@@ -547,9 +551,19 @@ window.addEventListener('resize', ()=>{
   scene.add(glow);
 })();
 
-scene.add(new THREE.HemisphereLight(0xdce8ff, 0x99895e, 0.72));   // sky fill + warm ground bounce
-const sun = new THREE.DirectionalLight(0xfff0d0, 1.25);           // strong warm key light
-sun.position.set(-60, 80, -40);
+/* LIGHTING.
+   The sun sat at ~48 degrees — near-overhead light, which is the flattest and
+   least interesting angle there is. Every rock cast a stub of a shadow and the
+   broken ground read as a plane.
+
+   Dropped to ~20 degrees. Raking light across uneven terrain is the oldest trick
+   in landscape painting: it turns every boulder and every step of the slope into
+   a long shadow, and the ground stops being a surface and becomes a place. The
+   ambient is pulled down to match, so those shadows actually read as dark rather
+   than being filled straight back in. */
+scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x8a7a52, 0.52));   // sky fill + warm ground bounce
+const sun = new THREE.DirectionalLight(0xffe6b4, 1.55);           // low, warm key light
+sun.position.set(-95, 40, -62);
 sun.castShadow = Q.shadows;
 sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
 const SH = Q.shadowExtent;
@@ -559,6 +573,21 @@ sun.shadow.camera.near = 10;   sun.shadow.camera.far = Q.shadowFar;
 sun.shadow.bias = -0.0012;
 sun.shadow.radius = 3;                                            // softer shadow edges
 scene.add(sun);
+scene.add(sun.target);
+
+/* The shadow frustum only spans `shadowExtent` around the light's TARGET, and
+   that target was the world origin — so walking out toward the rim of a 100-unit
+   map simply left the shadowed region, and everything around the player quietly
+   flattened out. Anchoring the sun to the player keeps the shadow map spent
+   where it is actually seen, which also means a small map can stay sharp.
+   The offset is the light direction; only the anchor moves, never the angle. */
+const SUN_OFFSET = new THREE.Vector3(-95, 40, -62);
+function trackSun(){
+  sun.target.position.set(camera.position.x, 0, camera.position.z);
+  sun.position.copy(sun.target.position).add(SUN_OFFSET);
+}
+trackSun();
+
 /* subtle warm rim fill from the opposite side to lift the shadows */
 const fill = new THREE.DirectionalLight(0xffe6c4, 0.18);
 fill.position.set(70, 40, 60);
@@ -891,12 +920,21 @@ const texDirt = pixTex((i,j)=>{
   const v = (n-0.5)*10;
   return [c[0]+v, c[1]+v, c[2]+v];
 });
+/* PALETTE.
+   The grass was [92,140,44] — a loud, saturated spring green covering the whole
+   map. When everything shouts, nothing is heard: the askers' red fezzes and blue
+   coats had nothing to read against. Art direction is mostly restraint.
+
+   It was 12 August, in the Macedonian hills. The ground is dry olive and
+   sun-bleached straw, not spring lawn. Desaturating it does two jobs at once —
+   it is more truthful, and it hands the whole red/blue end of the spectrum to
+   the enemy, so a man on the slope reads instantly. */
 const grassBlobs = makeBlobs(23, 13, 1.2, 2.8);
 const texGrassTop = pixTex((i,j)=>{
   const b = blobAt(grassBlobs, i, j), n = px(i,j,1);
-  let c = [92, 140, 44];
-  if(b >= 0) c = b < 0.35 ? [76,122,36] : b < 0.7 ? [86,132,40] : [106,154,52];
-  if(n > 0.93) c = [122, 168, 58];                            // bright blade tips
+  let c = [112, 128, 62];                                    // dry olive
+  if(b >= 0) c = b < 0.35 ? [96,114,54] : b < 0.7 ? [122,132,70] : [140,142,84];
+  if(n > 0.93) c = [158, 152, 96];                           // sun-bleached tips
   const v = (n-0.5)*10;
   return [c[0]+v, c[1]+v, c[2]+v*0.5];
 });
@@ -904,7 +942,7 @@ const texDirtSide = pixTex((i,j)=>{
   const lip = 2 + Math.floor(px(i,0,5)*2.6);                  // ragged 2–4 px lip
   if(j < lip){
     const b = blobAt(grassBlobs, i, j), n = px(i,j,1);
-    let c = b >= 0 && b < 0.5 ? [78,124,38] : [92,138,44];
+    let c = b >= 0 && b < 0.5 ? [98,116,56] : [114,130,64];   // matches the dry top
     const v = (n-0.5)*14;
     return [c[0]+v, c[1]+v, c[2]+v*0.5];
   }
@@ -974,7 +1012,9 @@ const texFez   = pixTex(()=>{ const v=rnd(-10,10); return [150+v, 44+v*0.5, 32+v
 const texGrassSprite = pixTex((i,j)=>{
   /* sparse vertical strands, transparent background */
   const strand = (i*7+3)%16 < 2 && j > 3 - 0 && Math.random() < 0.85 && j > (i*5)%6;
-  if(strand){ const v=rnd(-16,16); return [86+v, 132+v, 42+v*0.5, 255]; }
+  /* Matches the dry August ground, or the loose blades would sit as bright green
+     confetti on top of an olive field. */
+  if(strand){ const v=rnd(-16,16); return [112+v, 126+v, 62+v*0.5, 255]; }
   return [0,0,0,0];
 });
 const texBirch = pixTex((i,j)=>{
@@ -1044,18 +1084,62 @@ function mcMats(sideTex, topTex, botTex, extra){
 /* ============================================================
    VOXEL TERRAIN
    ============================================================ */
+/* ---- value noise ----
+   The terrain used sin(x*0.05)*cos(z*0.06). Trig repeats on a fixed lattice, so
+   the ripples tile — and the eye picks up that periodicity instantly, even when
+   a player could not say why the ground looks wrong. It is the clearest single
+   tell of generated terrain. Noise has no period, so it never announces itself. */
+function vnHash(i, j){
+  let n = Math.imul(i | 0, 0x27d4eb2d) ^ Math.imul(j | 0, 0x165667b1);
+  n = Math.imul(n ^ (n >>> 15), 0x85ebca6b);
+  n = Math.imul(n ^ (n >>> 13), 0xc2b2ae35);
+  return ((n ^ (n >>> 16)) >>> 0) / 2147483648 - 1;      // -1..1
+}
+function vnoise(x, z){
+  const i = Math.floor(x), j = Math.floor(z);
+  let fx = x - i, fz = z - j;
+  fx = fx*fx*(3 - 2*fx); fz = fz*fz*(3 - 2*fz);          // smoothstep the lattice
+  const a = vnHash(i, j),     b = vnHash(i+1, j);
+  const c = vnHash(i, j+1),   d = vnHash(i+1, j+1);
+  const top = a + (b - a)*fx;
+  const bot = c + (d - c)*fx;
+  return top + (bot - top)*fz;
+}
+/* Four octaves: broad landform, then progressively finer break-up. */
+function fbm(x, z){
+  let sum = 0, amp = 1, freq = 1, norm = 0;
+  for(let o = 0; o < 4; o++){
+    sum += vnoise(x*freq, z*freq) * amp;
+    norm += amp;
+    amp *= 0.5; freq *= 2;
+  }
+  return sum / norm;
+}
+
 function rawHeight(x, z){
   const d = Math.sqrt(x*x + z*z);
+  /* The broad shape is deliberately unchanged — a rise the player holds, falling
+     away on every side. Collision, sightlines and the whole feel of the defence
+     rest on that cone, so only the SURFACE changes here, not the landform. */
   let h = -d * 0.09;
-  h += Math.sin(x*0.05)*Math.cos(z*0.06)*1.6;
-  h += Math.sin(x*0.13 + 2.0)*Math.sin(z*0.11)*0.7;
+  h += fbm(x*0.030, z*0.030) * 3.6;    // rolling ground
+  h += fbm(x*0.105, z*0.105) * 0.9;    // finer break-up
   return h;
 }
 const VOX_R = 100;
+/* Memoised: four octaves of noise cost far more than the four sine terms they
+   replaced, and voxTop runs for every enemy every frame. The terrain never
+   changes, so each column is computed exactly once and then read from a map. */
+const voxTopCache = new Map();
 function voxTop(x, z){
   /* top surface of the voxel column containing (x,z) — half-block steps */
-  const cx = Math.floor(x)+0.5, cz = Math.floor(z)+0.5;
-  return Math.round(rawHeight(cx, cz)*2)/2;
+  const ix = Math.floor(x), iz = Math.floor(z);
+  const key = (ix + 1024) * 4096 + (iz + 1024);
+  const hit = voxTopCache.get(key);
+  if(hit !== undefined) return hit;
+  const h = Math.round(rawHeight(ix + 0.5, iz + 0.5) * 2) / 2;
+  voxTopCache.set(key, h);
+  return h;
 }
 
 (function buildVoxelGround(){
@@ -1611,9 +1695,65 @@ const flagCloth = (function flag(){
    WEAPONS — Бердана, Малихерка, Црешово топче
    each is a viewmodel group attached to the camera
    ============================================================ */
-const woodM  = lam(texLog);
-const steelM = new THREE.MeshLambertMaterial({color:0x4a4e55});
-const brassM = new THREE.MeshLambertMaterial({color:0xc08a3e});
+/* ---- weapon textures ----
+   The world's blocks all carry 16x16 pixel textures, but the weapons were flat
+   MeshLambertMaterial colours — a smooth grey barrel held up against a lovingly
+   textured oak. That mismatch, not the polygon count, is why the guns read as
+   rudimentary. Minecraft's models are trivially simple boxes; ALL of its detail
+   lives in the texture. So: give every weapon surface a texture. */
+
+/* Blued steel: cool cast, machined banding, a few bright wear scratches. */
+const texSteel = pixTex((i,j)=>{
+  let v = 74 + px(i,j,31)*16;
+  if(j === 0 || j === 15) v += 20;               // edges catch the light
+  if(px(i,j,32) > 0.95) v += 42;                 // sparse scratches
+  return [v*0.84|0, v*0.92|0, v|0];
+});
+
+/* Black iron: the topche's hoops and A-frame. Pitted, with the odd rust fleck. */
+const texIron = pixTex((i,j)=>{
+  if(px(i,j,43) > 0.975) return [96, 58, 32];    // rust
+  let v = 32 + px(i,j,41)*15;
+  if(px(i,j,42) > 0.93) v += 24;                 // pitting catching light
+  return [v|0, v*0.97|0, v*0.94|0];
+});
+
+/* Brass: butt-plates, fittings. Warm, with tarnish in the low spots. */
+const texBrass = pixTex((i,j)=>{
+  let v = 152 + px(i,j,51)*38;
+  if(px(i,j,52) > 0.88) v -= 48;                 // tarnish
+  return [v|0, v*0.71|0, v*0.31|0];
+});
+
+/* Cherry wood, for the topche: the honey-amber of a polished trunk, with the
+   darker vertical grain lines visible in the photograph. */
+const texCherry = pixTex((i,j)=>{
+  let v = 196 + px(i,j,61)*26;
+  if(px(i,0,62) > 0.68) v -= 24;                 // grain runs along the trunk
+  if(px(i,0,63) > 0.93) v -= 44;                 // a darker line
+  if(px(i,j,64) > 0.97) v -= 30;                 // knots
+  return [v|0, v*0.63|0, v*0.26|0];
+});
+
+/* Walnut: rifle stocks. Darker and redder than the world's log texture. */
+const texWalnut = pixTex((i,j)=>{
+  let v = 96 + px(i,j,81)*20;
+  if(px(i,0,82) > 0.70) v -= 18;                 // grain
+  if(px(i,j,83) > 0.96) v -= 22;
+  return [v|0, v*0.60|0, v*0.35|0];
+});
+
+/* The dark of a bore or a touch-hole. Not pure black — pure black reads as a
+   hole in the render, not as a hole in an object. */
+const texBore = pixTex((i,j)=> { const v = 15 + px(i,j,71)*11; return [v|0, v|0, v*1.05|0]; });
+
+const woodM   = lam(texLog);
+const walnutM = lam(texWalnut);
+const steelM  = lam(texSteel);
+const brassM  = lam(texBrass);
+const ironM   = lam(texIron);
+const cherryM = lam(texCherry);
+const boreM   = lam(texBore);
 const skinM  = lam(texSkin);
 const komitaWoolM = new THREE.MeshLambertMaterial({color:0x8a8268});   // homespun grey wool
 const komitaDarkM = new THREE.MeshLambertMaterial({color:0x4a4334});
@@ -1634,86 +1774,159 @@ function komitaHands(){
 }
 
 /* ---- 0: Бердана (single-shot) ---- */
+const box = (w,h,d,m)=> new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+
+/* ---- 0: Берданка (Berdan II — single-shot bolt rifle, the komita's mainstay) */
 const wpnBerdana = new THREE.Group();
 (function(){
-  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.6), woodM);
-  stock.position.set(0, -0.02, 0.05); wpnBerdana.add(stock);
-  const butt = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.22), woodM);
-  butt.position.set(0, -0.05, 0.36); wpnBerdana.add(butt);
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.8), steelM);
-  barrel.position.set(0, 0.02, -0.55); wpnBerdana.add(barrel);
-  const sight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.04, 0.012), steelM);
-  sight.position.set(0, 0.05, -0.9); wpnBerdana.add(sight);
-  const bolt = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.025, 0.025), steelM);
-  bolt.position.set(0.05, 0.035, 0.12); wpnBerdana.add(bolt);
+  const add = (m, x,y,z)=>{ m.position.set(x,y,z); wpnBerdana.add(m); return m; };
+
+  /* stock: fore-end, wrist, butt — three boxes, because a rifle stock is not one
+     shape and modelling it as one is most of why it read as a plank */
+  add(box(0.062, 0.075, 0.56, walnutM), 0, -0.02, 0.02);       // fore-end
+  add(box(0.055, 0.065, 0.16, walnutM), 0, -0.045, 0.30);      // wrist
+  add(box(0.072, 0.135, 0.22, walnutM), 0, -0.065, 0.44);      // butt
+  add(box(0.074, 0.14, 0.022, brassM),  0, -0.065, 0.555);     // brass butt-plate
+
+  /* barrel + the receiver it sits in */
+  add(box(0.05, 0.05, 0.20, steelM),   0, 0.015, -0.14);        // receiver
+  add(box(0.036, 0.036, 0.84, steelM), 0, 0.022, -0.66);        // barrel
+  add(box(0.03, 0.03, 0.30, walnutM),  0, 0.055, -0.42);        // upper handguard
+
+  /* two barrel bands — the detail that says "this is a service rifle" */
+  [-0.42, -0.86].forEach(z=> add(box(0.055, 0.055, 0.035, steelM), 0, 0.022, z));
+
+  /* bolt: body along the axis, handle turned out to the right */
+  add(box(0.028, 0.028, 0.16, steelM), 0.02, 0.038, -0.02);
+  add(box(0.10, 0.024, 0.024, steelM), 0.075, 0.038, 0.03);
+  add(box(0.032, 0.032, 0.032, steelM), 0.125, 0.038, 0.03);    // bolt knob
+
+  /* trigger group */
+  add(box(0.05, 0.012, 0.11, brassM), 0, -0.062, 0.14);         // trigger guard
+  add(box(0.012, 0.04, 0.014, steelM), 0, -0.055, 0.15);        // trigger
+
+  /* sights */
+  add(box(0.014, 0.042, 0.014, steelM), 0, 0.058, -1.02);       // front blade
+  add(box(0.04, 0.016, 0.05, steelM),   0, 0.048, -0.26);       // rear leaf
+
+  /* sling swivels */
+  add(box(0.01, 0.026, 0.01, steelM), 0, -0.055, -0.30);
+  add(box(0.01, 0.026, 0.01, steelM), 0, -0.10, 0.40);
+
+  wpnBerdana.traverse(o=>{ if(o.isMesh) o.castShadow = true; });
   const hands = komitaHands(); hands.position.set(0, -0.05, 0.18); wpnBerdana.add(hands);
 })();
 
 /* ---- 1: Малихерка (Mannlicher M1895 — clip-fed repeater) ---- */
 const wpnMannlicher = new THREE.Group();
 (function(){
-  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.075, 0.66), woodM);
-  stock.position.set(0, -0.02, 0.04); wpnMannlicher.add(stock);
-  const butt = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.12, 0.2), woodM);
-  butt.position.set(0, -0.05, 0.34); wpnMannlicher.add(butt);
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.92), steelM);
-  barrel.position.set(0, 0.025, -0.62); wpnMannlicher.add(barrel);
-  const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.4), woodM);
-  jacket.position.set(0, 0.02, -0.28); wpnMannlicher.add(jacket);
-  const clip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.06), brassM);
-  clip.position.set(0, -0.06, -0.02); wpnMannlicher.add(clip);
-  const boltH = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.022, 0.022), steelM);
-  boltH.position.set(0.06, 0.04, 0.06); wpnMannlicher.add(boltH);
-  const sight = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.035, 0.01), steelM);
-  sight.position.set(0, 0.055, -1.0); wpnMannlicher.add(sight);
+  const add = (m, x,y,z)=>{ m.position.set(x,y,z); wpnMannlicher.add(m); return m; };
+
+  /* Slimmer and longer than the Berdana — it should read as the better rifle at
+     a glance, because it is: a repeater against a single-shot. */
+  add(box(0.056, 0.070, 0.60, walnutM), 0, -0.02, 0.00);
+  add(box(0.050, 0.060, 0.16, walnutM), 0, -0.045, 0.30);
+  add(box(0.066, 0.125, 0.20, walnutM), 0, -0.062, 0.43);
+  add(box(0.068, 0.13, 0.02, steelM),   0, -0.062, 0.535);      // steel butt-plate
+
+  add(box(0.048, 0.048, 0.22, steelM),  0, 0.018, -0.13);       // receiver
+  add(box(0.032, 0.032, 0.96, steelM),  0, 0.025, -0.72);       // long barrel
+  add(box(0.046, 0.030, 0.44, walnutM), 0, 0.058, -0.46);       // upper handguard
+
+  [-0.46, -0.92].forEach(z=> add(box(0.05, 0.05, 0.032, steelM), 0, 0.025, z));
+
+  /* The en-bloc clip standing proud of the magazine is the Mannlicher's single
+     most recognisable feature — if one detail carries the silhouette, it is this. */
+  add(box(0.042, 0.11, 0.062, brassM), 0, -0.070, 0.02);
+  add(box(0.05, 0.05, 0.075, steelM),  0, -0.030, 0.02);        // magazine well
+
+  /* Straight-pull bolt: the handle runs back rather than turning up. */
+  add(box(0.026, 0.026, 0.20, steelM), 0.02, 0.040, 0.00);
+  add(box(0.09, 0.022, 0.022, steelM), 0.070, 0.040, 0.09);
+  add(box(0.030, 0.030, 0.030, steelM), 0.115, 0.040, 0.09);
+
+  add(box(0.048, 0.012, 0.10, steelM), 0, -0.058, 0.14);        // trigger guard
+  add(box(0.012, 0.038, 0.014, steelM), 0, -0.052, 0.15);
+
+  add(box(0.012, 0.040, 0.012, steelM), 0, 0.060, -1.16);       // front blade
+  add(box(0.038, 0.014, 0.05, steelM),  0, 0.048, -0.26);       // rear leaf
+
+  add(box(0.01, 0.024, 0.01, steelM), 0, -0.052, -0.34);
+  add(box(0.01, 0.024, 0.01, steelM), 0, -0.095, 0.38);
+
+  wpnMannlicher.traverse(o=>{ if(o.isMesh) o.castShadow = true; });
   const hands = komitaHands(); hands.position.set(0, -0.05, 0.16); wpnMannlicher.add(hands);
   wpnMannlicher.visible = false;
 })();
 
-/* ---- 2: Црешово топче (wooden cherry cannon, emplaced on the ground) ---- */
+/* ---- 2: Црешово топче — the cherry-tree cannon of the Ilinden uprising ----
+
+   Rebuilt from BOXES ONLY. The old model was cylinders, torus hoops, a sphere
+   and spoked wheels: the one object in a world of cubes rendering with smooth
+   curves. That is not a detail problem, it is an art-direction break — Minecraft
+   contains no curved geometry anywhere, and that constraint IS the look.
+
+   Also corrected against the photograph: the real topche has NO WHEELS. It is a
+   hollowed cherry trunk bound with black iron hoops, resting on a plain iron
+   A-frame. A tapered log with hard bands and an angular frame is a shape that
+   WANTS to be voxels. */
 const wpnCannon = new THREE.Group();
 (function(){
-  const cherryWood = new THREE.MeshLambertMaterial({color:0x6b4326});
-  const darkBore   = new THREE.MeshLambertMaterial({color:0x140d08});
-  /* barrel pointing forward (-Z), slightly elevated */
-  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.1, 12), cherryWood);
-  tube.rotation.x = Math.PI/2; tube.position.set(0, 0.18, -0.55); wpnCannon.add(tube);
-  const bore = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.18, 12), darkBore);
-  bore.rotation.x = Math.PI/2; bore.position.set(0, 0.18, -1.08); wpnCannon.add(bore);
-  /* iron reinforcing hoops along the tube */
-  [-0.95, -0.6, -0.2, 0.15].forEach(z=>{
-    const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.028, 6, 14), steelM);
-    hoop.position.set(0, 0.18, z); wpnCannon.add(hoop);
+  const box = (w,h,d,m)=> new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
+  const AX = 0.18;   // barrel axis height
+
+  /* The trunk, stepped rather than smoothly tapered — a voxel cone is a stack of
+     boxes, and reads correctly precisely because it steps. Breech is fattest. */
+  const segs = [
+    [0.32, 0.42,  0.06],   // breech
+    [0.30, 0.56, -0.42],
+    [0.28, 0.40, -0.90],
+  ];
+  segs.forEach(([s, len, z])=>{
+    const m = box(s, s, len, cherryM);
+    m.position.set(0, AX, z); m.castShadow = true; wpnCannon.add(m);
   });
-  /* cascabel (rear knob) + touch-hole */
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), cherryWood);
-  knob.position.set(0, 0.18, 0.2); wpnCannon.add(knob);
-  const touchHole = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.05,0.04), darkBore);
-  touchHole.position.set(0, 0.32, 0.05); wpnCannon.add(touchHole);
-  /* wooden carriage cradling the tube */
-  const cradle = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.7), woodM);
-  cradle.position.set(0, -0.02, -0.2); wpnCannon.add(cradle);
-  /* trail leg running back toward the gunner */
-  const trail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.7), woodM);
-  trail.position.set(0, -0.12, 0.35); trail.rotation.x = 0.18; wpnCannon.add(trail);
-  /* two spoked wheels */
-  [-0.32, 0.32].forEach(sx=>{
-    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.07, 14), cherryWood);
-    wheel.rotation.z = Math.PI/2; wheel.position.set(sx, -0.06, -0.15); wpnCannon.add(wheel);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.03, 6, 16), steelM);
-    rim.rotation.y = Math.PI/2; rim.position.set(sx, -0.06, -0.15); wpnCannon.add(rim);
-    for(let s=0;s<4;s++){
-      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.46, 0.03), woodM);
-      spoke.position.set(sx, -0.06, -0.15); spoke.rotation.x = s*Math.PI/4;
-      // orient spokes within the wheel plane
-      spoke.rotation.z = Math.PI/2; spoke.rotation.x = 0;
-      spoke.rotation.y = 0;
-      const sp = new THREE.Group(); sp.position.set(sx,-0.06,-0.15);
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03,0.46,0.03), woodM);
-      bar.rotation.x = s*(Math.PI/4);
-      sp.add(bar); sp.rotation.y = Math.PI/2; wpnCannon.add(sp);
-    }
+
+  /* Flared muzzle lip, then the bore itself set back inside it, so the mouth
+     reads as a hole in an object rather than a hole in the render. */
+  const lip = box(0.36, 0.36, 0.10, cherryM);
+  lip.position.set(0, AX, -1.13); lip.castShadow = true; wpnCannon.add(lip);
+  const bore = box(0.17, 0.17, 0.12, boreM);
+  bore.position.set(0, AX, -1.16); wpnCannon.add(bore);
+
+  /* Iron hoops. In voxel form a "ring" is simply a slightly fatter, thin slice —
+     no torus required, and it reads better because the edge is hard. */
+  [[0.35, 0.14], [0.33, -0.16], [0.32, -0.48], [0.31, -0.74], [0.31, -0.98]]
+    .forEach(([s, z])=>{
+      const h = box(s, s, 0.055, ironM);
+      h.position.set(0, AX, z); h.castShadow = true; wpnCannon.add(h);
+    });
+
+  /* Touch-hole on the breech, where the gunner puts the match. */
+  const touch = box(0.05, 0.06, 0.05, boreM);
+  touch.position.set(0, AX + 0.17, 0.10); wpnCannon.add(touch);
+
+  /* Black iron A-frame, straight from the photograph: two splayed forelegs, a
+     cross-brace, and a trail running back to the gunner. */
+  [-1, 1].forEach(sx=>{
+    const leg = box(0.045, 0.44, 0.045, ironM);
+    leg.position.set(sx * 0.17, -0.06, -0.34);
+    leg.rotation.z = sx * 0.30;
+    leg.castShadow = true; wpnCannon.add(leg);
   });
+  const brace = box(0.42, 0.045, 0.045, ironM);
+  brace.position.set(0, -0.26, -0.34); wpnCannon.add(brace);
+
+  const trail = box(0.055, 0.055, 0.86, ironM);
+  trail.position.set(0, -0.14, 0.28); trail.rotation.x = 0.22;
+  trail.castShadow = true; wpnCannon.add(trail);
+  const foot = box(0.22, 0.045, 0.045, ironM);
+  foot.position.set(0, -0.28, 0.66); wpnCannon.add(foot);
+
+  /* Saddle where the trunk rests on the frame. */
+  const saddle = box(0.30, 0.07, 0.16, ironM);
+  saddle.position.set(0, -0.01, -0.34); wpnCannon.add(saddle);
+
   wpnCannon.visible = false;
 })();
 
@@ -3676,6 +3889,7 @@ function animate(){
    composite instead (strength -> 0). Only a lost context falls back to a raw
    render. */
 function drawFrame(){
+  trackSun();                       // keep the shadow frustum centred on the player
   if(Bloom && Bloom.ok) Bloom.render();
   else renderer.render(scene, camera);
 }
