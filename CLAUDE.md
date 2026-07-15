@@ -116,5 +116,6 @@ testers for 14 continuous days before applying for production. Organization
 accounts are exempt (the signing cert already says `O=TEMIL`), but the account
 type cannot be changed after registration.
 
-**Unverified:** whether drag-to-aim works on a phone after `captureInput` was
-turned off. Confirm this on real hardware before anything ships.
+**Verified on hardware (Samsung, `RZCTA18857A`, 2026-07-15):** drag-to-aim,
+firing, weapon switching, landscape HUD, and auto-pause all work with
+`captureInput` off. This was the last shipping blocker.

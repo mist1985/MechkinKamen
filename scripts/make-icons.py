@@ -23,8 +23,17 @@ RES = ROOT / "android/app/src/main/res"
 PLAY = ROOT / "play"
 
 N = 128                       # authoring resolution
-CX, CY = 64, 70               # centre of the wreath
-R_OUT = 40                    # outer edge of the laurel
+
+# The badge must be centred on the canvas. CY was 70 on a 128px canvas — six
+# pixels low — so the whole mark sat off-centre on the launcher and the bottom
+# ribbon ran to y=126 of 128, close enough to the edge for the adaptive-icon mask
+# to bite into it. Both radii below are chosen so the widest part of the badge
+# (the ribbons, at R_OUT + RIB_OUT) leaves a real margin inside the canvas.
+CX, CY = 64, 64               # dead centre
+R_OUT = 36                    # outer edge of the laurel
+RIB_OUT = 15                  # how far the ribbons stand outside the laurel
+# widest extent = 36 + 15 = 51 from centre -> 102px across on a 128 canvas,
+# leaving 13px of margin all round.
 FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 
 BG        = (58, 20, 16)      # deep oxblood
@@ -125,36 +134,36 @@ def badge():
 
     # RIFLE — butt low-left, muzzle high-right
     RA = -35
-    for t in range(-32, 33):
+    for t in range(-29, 30):
         c = WOOD if t < 0 else STEEL              # stock, then barrel
-        half = 2 if t < -8 else 1                 # the butt is the thick end
+        half = 2 if t < -7 else 1                 # the butt is the thick end
         for w in range(-half, half + 1):
             d.point(along(RA, t, w), fill=c)
     for w in range(-3, 4):                        # butt-plate
-        d.point(along(RA, -32, w), fill=BRASS)
-    for t in range(-6, 2):                        # bolt handle, out to one side
+        d.point(along(RA, -29, w), fill=BRASS)
+    for t in range(-5, 2):                        # bolt handle, out to one side
         d.point(along(RA, t, 3), fill=STEEL)
-    d.point(along(RA, 30, 2), fill=STEEL)         # front sight
-    d.point(along(RA, 30, -2), fill=STEEL)
+    d.point(along(RA, 27, 2), fill=STEEL)         # front sight
+    d.point(along(RA, 27, -2), fill=STEEL)
 
     # SWORD — grip low-right, point high-left, and it TAPERS
     SA = -145
-    for t in range(-30, 34):
-        if t < -20:
+    for t in range(-28, 31):
+        if t < -19:
             c, half = (54, 40, 28), 1             # grip
-        elif t < -16:
+        elif t < -15:
             c, half = BRASS, 1                    # ferrule
         else:
             c = STEEL
-            half = 2 if t < 20 else 1             # blade narrows toward the point
+            half = 2 if t < 18 else 1             # blade narrows toward the point
         for w in range(-half, half + 1):
             d.point(along(SA, t, w), fill=c)
     for w in range(-5, 6):                        # crossguard, square to the blade
-        d.point(along(SA, -15, w), fill=BRASS)
         d.point(along(SA, -14, w), fill=BRASS)
+        d.point(along(SA, -13, w), fill=BRASS)
     for w in range(-2, 3):                        # pommel
-        d.point(along(SA, -31, w), fill=BRASS)
-    d.point(along(SA, 33, 0), fill=BONE)          # the point catching the light
+        d.point(along(SA, -29, w), fill=BRASS)
+    d.point(along(SA, 30, 0), fill=BONE)          # the point catching the light
 
     # --- grenade at the centre ---
     for gy in range(-11, 13):
@@ -164,21 +173,21 @@ def badge():
                 d.point((CX + gx, CY + gy), fill=GREN if hatch else GREN_D)
     d.rectangle([CX - 2, CY - 15, CX + 2, CY - 11], fill=GREN_D)      # fuse
 
-    # --- skull, at the foot of the wreath ---
-    sx, sy = CX - 7, CY + 20
-    d.rectangle([sx, sy, sx + 13, sy + 9], fill=BONE)
-    d.rectangle([sx + 2, sy + 2, sx + 5, sy + 5], fill=INK)          # eyes
-    d.rectangle([sx + 8, sy + 2, sx + 11, sy + 5], fill=INK)
-    d.rectangle([sx + 6, sy + 6, sx + 7, sy + 8], fill=(150, 138, 116))
+    # --- skull, at the foot of the wreath (pulled up to clear the smaller ring) ---
+    sx, sy = CX - 6, CY + 14
+    d.rectangle([sx, sy, sx + 12, sy + 8], fill=BONE)
+    d.rectangle([sx + 2, sy + 2, sx + 4, sy + 4], fill=INK)          # eyes
+    d.rectangle([sx + 8, sy + 2, sx + 10, sy + 4], fill=INK)
+    d.rectangle([sx + 6, sy + 5, sx + 6, sy + 7], fill=(150, 138, 116))
     for k in (0, 4, 8, 12):                                          # teeth
-        d.rectangle([sx + k, sy + 10, sx + k + 2, sy + 12], fill=BONE)
+        d.rectangle([sx + k, sy + 9, sx + k + 1, sy + 11], fill=BONE)
 
     # --- the two ribbons: СЛОБОДА over the top, ИЛИ СМРТ under the foot ---
-    ribbon(img, R_OUT + 3, R_OUT + 16, 197, 343)     # top arc
-    ribbon(img, R_OUT + 3, R_OUT + 16, 17, 163)      # bottom arc
+    ribbon(img, R_OUT + 2, R_OUT + RIB_OUT, 197, 343)     # top arc
+    ribbon(img, R_OUT + 2, R_OUT + RIB_OUT, 17, 163)      # bottom arc
 
-    text_arc(img, "СЛОБОДА", R_OUT + 9.5, 203, 337, 11, BONE)
-    text_arc(img, "ИЛИ СМРТ", R_OUT + 9.5, 163, 17, 11, BONE, flip=True)
+    text_arc(img, "СЛОБОДА", R_OUT + 8.5, 203, 337, 10, BONE)
+    text_arc(img, "ИЛИ СМРТ", R_OUT + 8.5, 163, 17, 10, BONE, flip=True)
 
     return img
 
