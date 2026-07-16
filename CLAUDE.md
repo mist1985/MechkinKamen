@@ -87,6 +87,29 @@ gitignored and must stay that way. The `.gitignore` globs are deliberately loose
 
 ---
 
+## Gameplay integrity — no exploits
+
+A shipped game must not contain mechanics that let a player trivially cheat the
+challenge. **Exploits that break the core loop (infinite ammo, invincibility,
+skipping the reload/cooldown economy, softlocks that hand a free win) are release
+blockers, not polish.** Treat any such report the way you'd treat a crash.
+
+Known invariants to preserve when touching weapons/combat:
+
+- **Per-weapon ammo and reload state must survive a weapon switch.** Each
+  weapon's magazine (`state.mags[i]`), reload timer (`state.reloads[i]`) and
+  clip-in-progress flag (`state.clippings[i]`) are stashed on the way out of
+  `switchWeapon()` and restored on the way in. Do **not** reset `state.mag` or
+  `state.reload` on switch — that was the original infinite-ammo /
+  instant-reload bug (fire the Mannlicher dry, tap 3 then 2, full clip back and
+  the cannon's 3.4 s reload cancelled). Regressing this re-opens the exploit.
+
+Before shipping a combat change, sanity-check the switch/fire/reload state
+machine (a headless Node simulation of `switchWeapon`/`fire` is enough — see the
+commit that fixed the ammo exploit).
+
+---
+
 ## Performance
 
 There is a `Q` quality tier near the top of the game script. It detects a phone

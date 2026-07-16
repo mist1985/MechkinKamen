@@ -22,3 +22,6 @@ android/capacitor-cordova-android-plugins/
 *.jks*
 *keystore*.properties
 keystore.properties
+
+# Local tester email list — personal addresses, never commit
+testers.csv

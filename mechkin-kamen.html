@@ -2639,8 +2639,10 @@ function spawnEnemy(){
 const gunCarry = new THREE.Vector3(0.375, 0.95, 0.15);
 const gunAim   = new THREE.Vector3(0.16, 1.58, 0.5);
 
-/* blocky smoke puffs — pooled, zero allocation per shot */
-const PUFF_POOL_N = 80;
+/* blocky smoke puffs — pooled, zero allocation per shot. Sized to hold the
+   boulder's whole blast (~100 puffs in one frame) without the ring debris
+   overwriting the fireball. 128 tiny invisible boxes cost nothing idle. */
+const PUFF_POOL_N = 128;
 const puffGeo = new THREE.BoxGeometry(0.35,0.35,0.35);
 const puffs = [];
 for(let i=0;i<PUFF_POOL_N;i++){
@@ -2882,6 +2884,9 @@ const state = {
   spawnTimer:0, reload:0, zoom:false, recoil:0, shakeT:0, pitchKick:0,
   stance:0, eyeH:1.7, vy:0, airH:0, grounded:true, bobPhase:0, sprinting:false,
   groundY:0, moveSpeed:0, grenades:3, healthT:14, weapon:0, mag:5, coins:0,
+  /* per-weapon ammo/reload state so switching can't refill a clip or cancel a
+     reload — see switchWeapon(). Seeded properly in the reset below. */
+  mags:[], reloads:[], clippings:[],
   combo:0, comboT:0, won:false, alliesIn:false, startTime:0, pausedMs:0, pauseAt:0
 };
 
@@ -3406,6 +3411,7 @@ function resetGame(){
     wave:0, toSpawn:0, spawnTimer:0, reload:0, zoom:false, recoil:0, shakeT:0,
     stance:0, eyeH:1.7, vy:0, airH:0, grounded:true, moveSpeed:0,
     grenades:3, healthT:14, weapon:0, mag:5, coins:0,
+    mags:WEAPONS.map(w=>w.mag||0), reloads:WEAPONS.map(()=>0), clippings:WEAPONS.map(()=>false),
     combo:0, comboT:0, pitchKick:0, sprinting:false, paused:false, pausedMs:0, clipping:false, won:false, alliesIn:false,
     groundY:voxTop(0.5,0.5), startTime:performance.now()});
   document.querySelectorAll('.wslot').forEach(b=> b.classList.toggle('on', b.dataset.w === '0'));
@@ -3763,9 +3769,17 @@ const WEAPONS = [
 let wgBaseY = 0.04, swayY = 0, swayX = 0, prevYawS = 0, prevPitchS = 0;
 function switchWeapon(i){
   if(i < 0 || i >= WEAPONS.length || i === state.weapon) return;
+  /* Stash the weapon we're leaving so its half-spent clip and running reload
+     survive the swap, then restore the one we're picking up. Without this,
+     every switch refilled the magazine and zeroed the reload timer for free —
+     an infinite-ammo / instant-reload exploit (fire dry, tap 3 then 2, repeat). */
+  state.mags[state.weapon] = state.mag;
+  state.reloads[state.weapon] = state.reload;
+  state.clippings[state.weapon] = state.clipping;
   state.weapon = i;
-  state.reload = 0;
-  state.mag = WEAPONS[i].mag || 0;
+  state.mag = state.mags[i];
+  state.reload = state.reloads[i];
+  state.clipping = state.clippings[i];
   WEAPON_MODELS.forEach((m,k)=> m.visible = (k === i));
   document.querySelectorAll('.wslot').forEach(b=> b.classList.toggle('on', +b.dataset.w === i));
   /* The cherry cannon is set DOWN on the ground and aimed, not carried.
@@ -3781,7 +3795,7 @@ function switchWeapon(i){
     wgBaseY = 0.04;
   }
   weaponGroup.rotation.y = wgBaseY;
-  crosshair.classList.remove('reloading');
+  crosshair.classList.toggle('reloading', state.reload > 0);
   updateAmmoHUD();
   showMsg(WEAPONS[i].name, 800);
 }
@@ -3930,7 +3944,7 @@ function spawnAllies(){
     scene.add(mesh);
     allies.push({mesh, def, gy:g, postX:px, postZ:pz,
       roamX:px, roamZ:pz, repostT:1 + Math.random()*3,
-      health:100, alive:true, dying:0, gone:false,
+      health:100, alive:true, dying:0, gone:false, faceTarget:null,
       fireTimer:1.5+Math.random()*2.5, walkPhase:Math.random()*6});
   });
   showMsg('ПИТУ ГУЛИ И БОРЦИТЕ ПРИСТИГНУВААТ!', 2600);
@@ -3986,31 +4000,33 @@ function hurtAlly(al, dmg){
 }
 
 function allyShoot(al){
-  let best = null, bd = 1e9;
   const ap = al.mesh.position;
+  const m = new THREE.Vector3(ap.x, ap.y+1.5, ap.z);
+  let best = null, bd = 1e9, bestThreat = Infinity;
   enemies.forEach(en=>{
     if(!en.alive) return;
-    const d = en.mesh.position.distanceTo(ap);
-    if(d < ALLY_RANGE && d < bd){
-      const m = new THREE.Vector3(ap.x, ap.y+1.5, ap.z);
-      if(clearLine(m, new THREE.Vector3(en.mesh.position.x, en.mesh.position.y+1.4,
-                                        en.mesh.position.z))){
-        bd = d; best = en;
-      }
-    }
+    const ep = en.mesh.position;
+    const d = ep.distanceTo(ap);
+    if(d > ALLY_RANGE) return;
+    if(!clearLine(m, new THREE.Vector3(ep.x, ep.y+1.4, ep.z))) return;
+    /* Smart focus-fire: defend the line. Of the askers this man can actually
+       hit, take the one closest to the PLAYER — the breach about to reach the
+       position — not merely the one nearest him. */
+    const threat = ep.distanceTo(camera.position);
+    if(threat < bestThreat){ bestThreat = threat; best = en; bd = d; }
   });
-  if(!best) return;
+  if(!best) return null;
 
   shotSound(false);
-  puffAt(new THREE.Vector3(ap.x, ap.y+1.5, ap.z));
+  puffAt(m);
 
-  /* Men with old rifles, not a targeting computer. Accuracy falls off hard with
-     range, and — crucially — a MISS IS SEEN: dust kicks up beside the asker. The
-     old code killed on a flat 55% with no miss at all, at 65 metres, five times
-     over. Five allies firing every ~1.5s at 55% is roughly 1.5 kills per SECOND,
-     against a wave that spawns one asker every 1.5s. They deleted the wave as
-     fast as it arrived — which is exactly why it felt like a cheat. */
-  const chance = Math.max(0.08, 0.40 - bd * 0.0075);
+  /* Men with old rifles, not a targeting computer. Accuracy is respectable on an
+     asker right at the wire and falls off hard with range, so the distant fight
+     stays the player's job — and a MISS IS SEEN: dust kicks beside the target,
+     never a silent aimbot. History: a flat 55% no-miss kill at 65m, five allies
+     over, deleted the wave as fast as it spawned and felt like a cheat; the fix
+     is accuracy that rewards defending the breach, not sniping the horizon. */
+  const chance = Math.max(0.10, 0.50 - bd * 0.011);
   if(Math.random() < chance){
     killEnemy(best, false);
   } else {
@@ -4019,6 +4035,7 @@ function allyShoot(al){
     const ix = ep.x + Math.cos(a)*rr, iz = ep.z + Math.sin(a)*rr;
     puffAt(new THREE.Vector3(ix, voxTop(ix,iz)+0.15, iz), 0xcdc4ae);
   }
+  return best;
 }
 
 /* ============================================================
@@ -4054,21 +4071,33 @@ function hurlStone(){
   camera.getWorldDirection(dir);
   g.position.copy(camera.position).addScaledVector(dir, 2).setY(camera.position.y + 1);
   scene.add(g);
-  boulders.push({ mesh:g, vel:new THREE.Vector3(dir.x*30, dir.y*30 + 9, dir.z*30), life:6 });
+  /* Heavy lob, not a bullet. A giant stone is thrown SLOW and HIGH so it drops
+     steeply onto the asker line ~30 m out; aiming higher lobs it further. The old
+     flat 30 m/s throw (barely any arc) sailed clean over the enemies and
+     detonated in empty ground ~54 m behind them — which is exactly why it felt
+     like nothing. */
+  const flat = new THREE.Vector3(dir.x, 0, dir.z);
+  if(flat.lengthSq() < 1e-4) flat.set(0, 0, -1); else flat.normalize();
+  const FWD = 11, UP = 14;
+  boulders.push({ mesh:g, life:9,
+    vel:new THREE.Vector3(flat.x*FWD, UP + Math.max(0, dir.y)*12, flat.z*FWD) });
 }
 function boulderImpact(p){
-  boomSound(); boomSound();
-  state.shakeT = 0.8;
-  const BLAST = 22;                                  // enormous radius
-  for(let i=0;i<26;i++){
-    puffAt(new THREE.Vector3(p.x+rnd(-4,4), p.y+rnd(0,4), p.z+rnd(-4,4)),
-      i<10 ? 0xff8c35 : 0xcdc4ae);
+  boomSound(); boomSound(); boomSound();
+  state.shakeT = 1.4;                                // long, ground-heaving shake
+  const BLAST = 26;                                  // ~4x the grenade's 6 — unmistakable
+  /* fireball + a tall debris column kicked skyward */
+  for(let i=0;i<40;i++){
+    puffAt(new THREE.Vector3(p.x+rnd(-6,6), p.y+rnd(0,8), p.z+rnd(-6,6)),
+      i<16 ? 0xff8c35 : 0xcdc4ae);
   }
-  for(let ring=0; ring<3; ring++){
-    const rr = 5 + ring*6;
-    for(let i=0; i<14; i++){
-      const a = i/14*Math.PI*2;
-      puffAt(new THREE.Vector3(p.x+Math.cos(a)*rr, p.y+0.2, p.z+Math.sin(a)*rr), 0xb8b2a4);
+  /* expanding shock rings — fire at the core, fading to dust at the rim */
+  for(let ring=0; ring<5; ring++){
+    const rr = 4 + ring*5.5;
+    for(let i=0; i<12; i++){
+      const a = i/12*Math.PI*2;
+      puffAt(new THREE.Vector3(p.x+Math.cos(a)*rr, p.y+0.2, p.z+Math.sin(a)*rr),
+        ring<2 ? 0xff8c35 : 0xb8b2a4);
     }
   }
   let killed = 0;
@@ -4378,7 +4407,12 @@ function animate(){
   const kickback = W.kind === 'cannon' ? 0.16 : 0.05;
   if(state.reload > 0){
     state.reload -= dt;
-    const ph = 1 - state.reload/W.reload;
+    /* Phase must be measured against the reload actually running: a clip change
+       uses clipReload (2.0s), not the per-shot W.reload (0.5s). Dividing by the
+       wrong one drove ph negative and made the rifle pump back and forth for the
+       first 1.5s of every Mannlicher clip change. */
+    const reloadDur = state.clipping ? W.clipReload : W.reload;
+    const ph = 1 - state.reload/reloadDur;
     wm.position.z = Math.sin(ph*Math.PI)*kickback;            // shove back then return
     wm.rotation.x = Math.sin(ph*Math.PI)*(W.kind==='cannon'?0.4:0.25);
     if(state.reload <= 0){
@@ -4616,7 +4650,10 @@ function animate(){
 
       let tgt=null, bd=1e9;
       enemies.forEach(en=>{ if(en.alive){ const dd=en.mesh.position.distanceTo(p); if(dd<bd){bd=dd;tgt=en;} } });
-      if(tgt) al.mesh.rotation.y = Math.atan2(tgt.mesh.position.x - p.x, tgt.mesh.position.z - p.z);
+      /* Face the asker he is actually engaging (the one nearest the player he
+         last fired on), falling back to the nearest asker between shots. */
+      const faceEn = (al.faceTarget && al.faceTarget.alive) ? al.faceTarget : tgt;
+      if(faceEn) al.mesh.rotation.y = Math.atan2(faceEn.mesh.position.x - p.x, faceEn.mesh.position.z - p.z);
 
       /* Reposition when the shot is blocked, or simply when he has been in one
          spot too long. This is what stops him being a fencepost. */
@@ -4652,9 +4689,15 @@ function animate(){
 
       al.fireTimer -= dt;
       if(al.fireTimer <= 0){
-        /* was 1.2-2.6s; now 2.6-4.8s. Slower men, older rifles. */
-        al.fireTimer = 2.6 + Math.random()*2.2;
-        allyShoot(al);
+        const shotAt = allyShoot(al);
+        al.faceTarget = shotAt;
+        /* Proactive under pressure: if the asker he engaged is right at the wire
+           (near the player's line) he works the bolt fast (~1.2-2.2s); otherwise
+           unhurried (~2.6-4.8s). Measured against the man actually shot, so "at
+           the wire" is player-relative as the comment intends. */
+        const atWire = shotAt && shotAt.mesh.position.distanceTo(camera.position) < 16;
+        al.fireTimer = atWire ? (1.2 + Math.random()*1.0)
+                              : (2.6 + Math.random()*2.2);
       }
     });
     /* overwhelmed? the fighters come to your side */
