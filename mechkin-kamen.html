@@ -94,6 +94,12 @@
   #hitmarker line{stroke:var(--blood);stroke-width:3;}
   #dmgflash{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(143,43,31,.55) 100%);
     opacity:0;transition:opacity .15s;}
+  /* golden shield vignette — on only while the easter-egg Maxim/шит is active */
+  #shieldveil{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s;
+    background:radial-gradient(ellipse at center,transparent 52%,rgba(212,170,74,.30) 100%);
+    box-shadow:inset 0 0 130px rgba(255,214,120,.28);}
+  #shieldveil.on{opacity:1;animation:shieldpulse 2.4s ease-in-out infinite;}
+  @keyframes shieldpulse{0%,100%{opacity:.55;}50%{opacity:1;}}
   #radar{position:absolute;top:max(54px,calc(env(safe-area-inset-top) + 44px));right:14px;width:96px;height:96px;
     border-radius:50%;border:2px solid rgba(232,220,196,.4);background:rgba(20,28,16,.55);}
   #radarlbl{position:absolute;top:max(152px,calc(env(safe-area-inset-top) + 142px));right:14px;width:96px;
@@ -305,6 +311,7 @@
 
 <div id="hud">
   <div id="dmgflash"></div>
+  <div id="shieldveil"></div>
   <canvas id="radar" width="96" height="96"></canvas>
   <div id="radarlbl">радар</div>
   <svg id="crosshair" viewBox="0 0 46 46">
@@ -1662,6 +1669,7 @@ const rocksInst = (function(){
   return inst;
 })();
 const coverMeshes = [rocksInst];       // houses and walls join this list
+let eggDoor = null;                     // the hidden plank door — set once the town is built
 
 /* ============================================================
    TREES — voxel oaks and spruces
@@ -2128,6 +2136,37 @@ const clouds = [];
   inst(cobbleM, texCobble);
 })();
 
+/* ============================================================
+   ТАЈНАТА ВРАТА — the hidden door (easter egg)
+   A barred oak door set into the front of the lower-town house at plot [8,41].
+   It reads as an ordinary boarded-up door until you fire on it; then it gives
+   up the captured Maxim that was hidden behind it. Turn your back on the line
+   and search the mahala to find it — it is not on the way to anything.
+   ============================================================ */
+(function eggDoorBuild(){
+  const bx = 8, bz = 41, w = 5;                       // must match its plot above
+  let g0 = Infinity;                                  // same floor line the house used
+  for(let ix=0; ix<w; ix++) for(let iz=0; iz<5; iz++)
+    g0 = Math.min(g0, voxTop(bx+ix+0.5, bz+iz+0.5));
+  const cx = bx + Math.floor(w/2) + 0.5;              // door cell centre (=10.5)
+  const fz = bz - 0.07;                               // just proud of the front face
+  /* the plank slab itself */
+  eggDoor = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.9, 0.14), lam(texPlank));
+  eggDoor.position.set(cx, g0 + 1.0, fz);
+  eggDoor.castShadow = true;
+  eggDoor.userData.isEggDoor = true;
+  /* two dark iron cross-bands, so it reads as barred rather than just a wall */
+  const bandM = new THREE.MeshLambertMaterial({color:0x2a241a});
+  [0.5, -0.5].forEach(y=>{
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.14, 0.16), bandM);
+    band.position.set(0, y, 0); eggDoor.add(band);
+  });
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.12), bandM);
+  handle.position.set(0.28, 0, 0.02); eggDoor.add(handle);
+  scene.add(eggDoor);
+  coverMeshes.push(eggDoor);                          // stops bullets like any door
+})();
+
 
 /* ============================================================
    ЗНАМЕТО — „СЛОБОДА ИЛИ СМРТ"
@@ -2445,12 +2484,40 @@ const wpnCannon = new THREE.Group();
   wpnCannon.visible = false;
 })();
 
+/* ---- 3: Максим (a captured Ottoman Maxim gun — the EASTER-EGG weapon) ----
+   Historically the machine gun of 1903 was the water-cooled Maxim, and the
+   Ottoman army fielded them; a komita would only ever hold one by taking it.
+   That is exactly the fiction of the hidden door: you don't own this, you seize
+   it. Built blocky like everything else — water jacket, feed block, spade grips. */
+const wpnMaxim = new THREE.Group();
+(function(){
+  const add = (m, x,y,z)=>{ m.position.set(x,y,z); wpnMaxim.add(m); return m; };
+  /* water-cooling jacket: the fat perforated barrel shroud that says "Maxim" */
+  add(box(0.10, 0.10, 0.74, steelM), 0, 0.02, -0.34);
+  /* jacket bands + the muzzle booster poking out the front */
+  [-0.20, -0.48].forEach(z=> add(box(0.115, 0.115, 0.03, ironM), 0, 0.02, z));
+  add(box(0.05, 0.05, 0.14, boreM),  0, 0.02, -0.76);
+  /* receiver / breech behind the jacket */
+  add(box(0.14, 0.15, 0.24, ironM),  0, 0.01, 0.06);
+  /* belt feed block sticking out the left, with a stub of cartridge belt */
+  add(box(0.06, 0.11, 0.11, brassM), -0.11, 0.03, 0.02);
+  for(let k=0;k<4;k++) add(box(0.03, 0.05, 0.03, brassM), -0.18 - k*0.035, 0.0, 0.02);
+  /* twin spade grips at the back, with the thumb-trigger between them */
+  [-0.07, 0.07].forEach(x=> add(box(0.03, 0.18, 0.05, ironM), x, -0.12, 0.20));
+  add(box(0.05, 0.03, 0.03, steelM), 0, -0.05, 0.24);
+  /* the gunner's hands wrapped over the grips */
+  const hands = komitaHands();
+  hands.position.set(0, -0.10, 0.22); hands.rotation.x = -0.2; wpnMaxim.add(hands);
+  wpnMaxim.traverse(o=>{ if(o.isMesh) o.castShadow = true; });
+  wpnMaxim.visible = false;
+})();
+
 const weaponGroup = new THREE.Group();
-weaponGroup.add(wpnBerdana, wpnMannlicher, wpnCannon);
+weaponGroup.add(wpnBerdana, wpnMannlicher, wpnCannon, wpnMaxim);
 weaponGroup.position.set(0.16, -0.16, -0.42);
 weaponGroup.rotation.y = 0.04;
 camera.add(weaponGroup);
-const WEAPON_MODELS = [wpnBerdana, wpnMannlicher, wpnCannon];
+const WEAPON_MODELS = [wpnBerdana, wpnMannlicher, wpnCannon, wpnMaxim];
 
 const flash = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.1),
   new THREE.MeshBasicMaterial({color:0xffd27a, transparent:true, opacity:0}));
@@ -2793,7 +2860,7 @@ function explodeGrenade(gr){
   });
   /* careful where you throw it */
   const pd = camera.position.distanceTo(p);
-  if(pd < 5){
+  if(pd < 5 && !state.shield){
     state.health -= (5-pd)*12;
     dmgflash.style.opacity = 1;
     setTimeout(()=> dmgflash.style.opacity = 0, 250);
@@ -2887,6 +2954,8 @@ const state = {
   /* per-weapon ammo/reload state so switching can't refill a clip or cancel a
      reload — see switchWeapon(). Seeded properly in the reset below. */
   mags:[], reloads:[], clippings:[],
+  /* easter egg: the captured Maxim + an unbreakable shield (see takeMaxim) */
+  eggTaken:false, shield:false,
   combo:0, comboT:0, won:false, alliesIn:false, startTime:0, pausedMs:0, pauseAt:0
 };
 
@@ -2894,7 +2963,7 @@ const $ = id => document.getElementById(id);
 const healthfill=$('healthfill'), waveLabel=$('wave-label'), scoreLabel=$('score-label'),
       ammoLabel=$('ammo'), msgEl=$('msg'), crosshair=$('crosshair'),
       hitmarker=$('hitmarker'), dmgflash=$('dmgflash'), stanceLabel=$('stancelabel'),
-      nadeLabel=$('nadelabel');
+      nadeLabel=$('nadelabel'), shieldveil=$('shieldveil');
 const coinLabel=$('coinlabel'), stonebtn=$('stonebtn'), stoneCount=$('stonecount');
 
 /* Single place that renders the stone's charge, so the button badge, the panel
@@ -3382,10 +3451,19 @@ function tryJump(){
   if(state.grounded){ state.vy = JUMP_V; state.grounded = false; }
 }
 
+/* Easter-egg horde: ONLY once the Maxim is taken do the askers pour in in vast
+   numbers — a shooting gallery for an unkillable gunner. Normal runs are never
+   touched; the wave sizes below are exactly what they always were. */
+const EGG_MAX_ALIVE = 32;    // how many askers may be on screen at once (perf cap)
+const EGG_SPAWN_BURST = 3;   // spawned per tick while the egg is active
+const EGG_SPAWN_GAP = 0.22;  // seconds between those bursts
+function eggWaveCount(){ return 48 + state.wave*10; }   // vast per-wave budget
+
 function startWave(){
   state.wave++;
   state.toSpawn = 4 + state.wave*3;
   if(state.wave === FINAL_WAVE) state.toSpawn = 46;      // Бахтијар-паша со сè што има
+  if(state.eggTaken) state.toSpawn = eggWaveCount();     // ...but the egg floods the field
   state.spawnTimer = 4;                      // breather: dig in before they come
   state.health = Math.min(100, state.health + 15);
   healthfill.style.width = Math.max(0,state.health) + '%';
@@ -3413,7 +3491,11 @@ function resetGame(){
     grenades:3, healthT:14, weapon:0, mag:5, coins:0,
     mags:WEAPONS.map(w=>w.mag||0), reloads:WEAPONS.map(()=>0), clippings:WEAPONS.map(()=>false),
     combo:0, comboT:0, pitchKick:0, sprinting:false, paused:false, pausedMs:0, clipping:false, won:false, alliesIn:false,
+    eggTaken:false, shield:false,
     groundY:voxTop(0.5,0.5), startTime:performance.now()});
+  /* re-bar the easter-egg door and drop the shield for the new run */
+  if(eggDoor){ eggDoor.visible = true; eggDoor.userData.used = false; }
+  shieldveil.classList.remove('on');
   document.querySelectorAll('.wslot').forEach(b=> b.classList.toggle('on', b.dataset.w === '0'));
   dmgflash.classList.remove('lowhp');
   $('pausescreen').classList.add('hidden');
@@ -3507,6 +3589,8 @@ function victory(){
 
 function gameOver(won){
   state.running = false;
+  state.shield = false;
+  shieldveil.classList.remove('on');
   const mins = ((performance.now()-state.startTime-state.pausedMs)/60000);
   $('finalstats').innerHTML =
     'Поразени непријатели: <b>'+state.score+'</b><br>'+
@@ -3764,11 +3848,18 @@ const muzzle = new THREE.Vector3();
 const WEAPONS = [
   {name:'Бердана',  reload:1.6,  auto:false, kind:'rifle'},
   {name:'Малихерка', reload:0.5,  auto:true,  kind:'rifle', mag:5, clipReload:2.0},
-  {name:'Црешово топче', reload:3.4, auto:false, kind:'cannon'}
+  {name:'Црешово топче', reload:3.4, auto:false, kind:'cannon'},
+  /* the hidden Maxim: no magazine (an endless belt) and a 0.07s per-shot cycle,
+     so it hoses. Reached only through the easter-egg door, never a HUD slot. */
+  {name:'Максим', reload:0.07, auto:true, kind:'mg'}
 ];
+const MAXIM_I = 3;   // index of the Maxim in WEAPONS / WEAPON_MODELS
 let wgBaseY = 0.04, swayY = 0, swayX = 0, prevYawS = 0, prevPitchS = 0;
 function switchWeapon(i){
   if(i < 0 || i >= WEAPONS.length || i === state.weapon) return;
+  /* Once you seize the Maxim it is the only gun you carry — the old rifles are
+     forgotten. Blocks the 1/2/3 keys and HUD slots from switching off it. */
+  if(state.eggTaken && i !== MAXIM_I) return;
   /* Stash the weapon we're leaving so its half-spent clip and running reload
      survive the swap, then restore the one we're picking up. Without this,
      every switch refilled the magazine and zeroed the reload timer for free —
@@ -3801,7 +3892,9 @@ function switchWeapon(i){
 }
 function updateAmmoHUD(){
   const W = WEAPONS[state.weapon];
-  if(W.mag){
+  if(W.kind === 'mg'){
+    ammoLabel.textContent = W.name + ' · ∞';
+  } else if(W.mag){
     let pips = '';
     for(let k=0;k<W.mag;k++) pips += k < state.mag ? '●' : '○';
     ammoLabel.textContent = W.name + ' · ' + pips;
@@ -4142,8 +4235,10 @@ function fire(){
   } else {
     state.reload = W.reload;
   }
-  state.recoil = W.kind === 'cannon' ? 2.2 : 1;
-  state.pitchKick += W.kind === 'cannon' ? 0.075 : (W.mag ? 0.022 : 0.038);
+  state.recoil = W.kind === 'cannon' ? 2.2 : (W.kind === 'mg' ? 0.5 : 1);
+  /* the Maxim fires ~14x a second — a full rifle kick each shot would fling the
+     muzzle at the sky, so give it a light, controllable climb */
+  state.pitchKick += W.kind === 'cannon' ? 0.075 : (W.kind === 'mg' ? 0.006 : (W.mag ? 0.022 : 0.038));
   crosshair.classList.add('reloading');
   updateAmmoHUD();
 
@@ -4174,6 +4269,13 @@ function fire(){
     if(muzzle.y < voxTop(muzzle.x, muzzle.z) - 0.05){ stopD = Math.min(stopD, d); break; }
   }
 
+  /* EASTER EGG: a round into the barred plank door of the lower house splinters
+     it open and reveals the captured Maxim behind it. */
+  if(eggDoor && !state.eggTaken){
+    const dh = raycaster.intersectObject(eggDoor, true)[0];
+    if(dh && dh.distance <= stopD + 0.3){ takeMaxim(dh.point); return; }
+  }
+
   if(hits.length && hits[0].distance < stopD){
     let obj = hits[0].object, root = obj;
     while(root.parent && root.parent !== scene) root = root.parent;
@@ -4191,6 +4293,48 @@ function fire(){
     puffAt(muzzle, 0xb8b2a4);
     thudSound();
   }
+}
+
+/* ============================================================
+   МАКСИМ — the easter-egg payoff. Splinter the door, hand the player the
+   captured Maxim and an unbreakable shield, and let them mow the line down.
+   This is a deliberate, developer-placed cheat, NOT the reload/ammo exploit
+   the switch/fire state machine guards against — it grants a NEW weapon rather
+   than duplicating a magazine, so it can't leak back into normal play.
+   ============================================================ */
+function takeMaxim(pt){
+  if(state.eggTaken) return;
+  state.eggTaken = true;
+  state.shield = true;
+  state.health = 100;
+  healthfill.style.width = '100%';
+  dmgflash.classList.remove('lowhp');
+
+  /* the door bursts: splinters + a puff of dust where it was */
+  if(pt) for(let i=0;i<12;i++)
+    puffAt(new THREE.Vector3(pt.x+rnd(-0.4,0.4), pt.y+rnd(-0.7,0.9), pt.z+rnd(-0.3,0.3)),
+      i<4 ? 0xffd27a : 0xb8b2a4);
+  if(eggDoor){ eggDoor.visible = false; eggDoor.userData.used = true; }
+  boomSound();
+
+  /* swell the CURRENT wave at once, and start pouring immediately — the horde
+     shouldn't wait for the next wave to arrive */
+  state.toSpawn = Math.max(state.toSpawn, eggWaveCount());
+  state.spawnTimer = 0;
+
+  /* force the Maxim up as the carried weapon (bypasses the switch-lock) */
+  state.weapon = MAXIM_I;
+  state.mag = 0; state.reload = 0; state.clipping = false;
+  WEAPON_MODELS.forEach((m,k)=> m.visible = (k === MAXIM_I));
+  weaponGroup.position.set(0.14, -0.19, -0.5);
+  wgBaseY = 0.02; weaponGroup.rotation.y = wgBaseY;
+  document.querySelectorAll('.wslot').forEach(b=> b.classList.remove('on'));
+  crosshair.classList.remove('reloading');
+  updateAmmoHUD();
+
+  shieldveil.classList.add('on');
+  /* the game's spine is „Овде ќе се умре!" — the egg cheerfully inverts it */
+  showMsg('МАКСИМ! · ОВДЕ НЕ СЕ УМИРА', 2600);
 }
 
 /* An asker picks the nearest thing it can see — you OR a komita.
@@ -4248,13 +4392,18 @@ function enemyShootsPlayer(en){
   const chance = Math.min(0.5, 9/pd + 0.05) * HITMOD_BY_STANCE[state.stance]
                * speedMod * (en.accMod || 1);
   if(Math.random() < chance){
-    state.health -= 8 + Math.random()*7;
-    state.shakeT = 0.25;
-    dmgflash.style.opacity = 1;
-    setTimeout(()=> dmgflash.style.opacity = 0, 220);
-    healthfill.style.width = Math.max(0,state.health) + '%';
-    showDmgFrom(en.mesh.position);
-    if(state.health <= 0) gameOver();
+    if(state.shield){
+      /* the round strikes the shield and sparks off — no harm */
+      puffAt(new THREE.Vector3(camera.position.x, camera.position.y-0.2, camera.position.z), 0xffd27a);
+    } else {
+      state.health -= 8 + Math.random()*7;
+      state.shakeT = 0.25;
+      dmgflash.style.opacity = 1;
+      setTimeout(()=> dmgflash.style.opacity = 0, 220);
+      healthfill.style.width = Math.max(0,state.health) + '%';
+      showDmgFrom(en.mesh.position);
+      if(state.health <= 0) gameOver();
+    }
   } else {
     /* a clean MISS — the round whips past and kicks up dust beside you */
     const a = Math.random()*Math.PI*2, rr = 0.9 + Math.random()*2.2;
@@ -4418,7 +4567,8 @@ function animate(){
     if(state.reload <= 0){
       state.reload = 0;
       if(state.clipping){ state.mag = W.mag; state.clipping = false; }
-      if(W.kind !== 'cannon') boltSound();
+      /* the Maxim's "reload" is just its 0.07s fire gate — no bolt clatter each round */
+      if(W.kind !== 'cannon' && W.kind !== 'mg') boltSound();
       wm.position.z = 0; wm.rotation.x = 0;
       crosshair.classList.remove('reloading');
       updateAmmoHUD();
@@ -4452,8 +4602,19 @@ function animate(){
     if(state.toSpawn > 0){
       state.spawnTimer -= dt;
       if(state.spawnTimer <= 0){
-        spawnEnemy(); state.toSpawn--;
-        state.spawnTimer = Math.max(0.45, 2.4 - state.wave*0.18);
+        if(state.eggTaken){
+          /* flood the line, but never past the on-screen cap — as fast as you mow
+             them down, the gap refills. The wave still ENDS (toSpawn is finite),
+             so the game can still be won. */
+          let alive = 0;
+          for(let k=0;k<enemies.length;k++) if(enemies[k].alive) alive++;
+          const room = Math.min(state.toSpawn, EGG_SPAWN_BURST, EGG_MAX_ALIVE - alive);
+          for(let k=0;k<room;k++){ spawnEnemy(); state.toSpawn--; }
+          state.spawnTimer = EGG_SPAWN_GAP;
+        } else {
+          spawnEnemy(); state.toSpawn--;
+          state.spawnTimer = Math.max(0.45, 2.4 - state.wave*0.18);
+        }
       }
     }
 
@@ -4597,13 +4758,18 @@ function animate(){
         if(en.meleeT <= 0){
           en.meleeT = 1.1;
           thudSound();
-          state.health -= 12;
-          state.shakeT = 0.3;
-          dmgflash.style.opacity = 1;
-          setTimeout(()=> dmgflash.style.opacity = 0, 220);
-          healthfill.style.width = Math.max(0,state.health) + '%';
-          showDmgFrom(en.mesh.position);
-          if(state.health <= 0) gameOver();
+          if(state.shield){
+            /* the bayonet glances off the shield */
+            puffAt(new THREE.Vector3(camera.position.x, camera.position.y-0.3, camera.position.z), 0xffd27a);
+          } else {
+            state.health -= 12;
+            state.shakeT = 0.3;
+            dmgflash.style.opacity = 1;
+            setTimeout(()=> dmgflash.style.opacity = 0, 220);
+            healthfill.style.width = Math.max(0,state.health) + '%';
+            showDmgFrom(en.mesh.position);
+            if(state.health <= 0) gameOver();
+          }
         }
       }
     });
